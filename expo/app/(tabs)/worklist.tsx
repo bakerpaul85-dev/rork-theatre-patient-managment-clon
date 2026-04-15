@@ -42,6 +42,14 @@ import {
 } from 'lucide-react-native';
 import { fetchWorklist, WorklistPatient } from '@/utils/worklistService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getGlobalWorklistUrl,
+  saveGlobalWorklistUrl,
+  getGlobalManualEntries,
+  saveGlobalManualEntry,
+  deleteGlobalManualEntry,
+  isGlobalStorageAvailable,
+} from '@/utils/globalWorklistStorage';
 
 const WORKLIST_URL_KEY = '@worklist_spreadsheet_url';
 const MANUAL_ENTRIES_KEY = '@worklist_manual_entries';
@@ -137,6 +145,17 @@ export default function WorklistScreen() {
   const savedUrlQuery = useQuery({
     queryKey: ['worklist-url'],
     queryFn: async () => {
+      if (isGlobalStorageAvailable()) {
+        try {
+          const globalUrl = await getGlobalWorklistUrl();
+          if (globalUrl) {
+            console.log('[Worklist] Using global URL from DB');
+            return globalUrl;
+          }
+        } catch (e) {
+          console.warn('[Worklist] Global DB fetch failed, falling back to local:', e);
+        }
+      }
       const saved = await AsyncStorage.getItem(WORKLIST_URL_KEY);
       return saved || process.env.EXPO_PUBLIC_GOOGLE_SHEET_URL || '';
     },
@@ -147,15 +166,35 @@ export default function WorklistScreen() {
   const manualEntriesQuery = useQuery({
     queryKey: ['manual-entries'],
     queryFn: async () => {
+      if (isGlobalStorageAvailable()) {
+        try {
+          const globalEntries = await getGlobalManualEntries();
+          console.log('[Worklist] Loaded', globalEntries.length, 'global manual entries');
+          return globalEntries;
+        } catch (e) {
+          console.warn('[Worklist] Global DB fetch failed, falling back to local:', e);
+        }
+      }
       const stored = await AsyncStorage.getItem(MANUAL_ENTRIES_KEY);
       return stored ? (JSON.parse(stored) as WorklistPatient[]) : [];
     },
+    staleTime: 30 * 1000,
   });
 
   const manualEntries = useMemo(() => manualEntriesQuery.data || [], [manualEntriesQuery.data]);
 
   const saveManualEntryMutation = useMutation({
     mutationFn: async (entry: WorklistPatient) => {
+      if (isGlobalStorageAvailable()) {
+        try {
+          await saveGlobalManualEntry(entry);
+          console.log('[Worklist] Saved entry to global DB');
+          const globalEntries = await getGlobalManualEntries();
+          return globalEntries;
+        } catch (e) {
+          console.warn('[Worklist] Global save failed, saving locally:', e);
+        }
+      }
       const current = manualEntries;
       const updated = [...current, entry];
       await AsyncStorage.setItem(MANUAL_ENTRIES_KEY, JSON.stringify(updated));
@@ -165,12 +204,22 @@ export default function WorklistScreen() {
       queryClient.setQueryData(['manual-entries'], updated);
       setShowAddEntry(false);
       setManualForm({ ...emptyManualForm });
-      Alert.alert('Success', 'Entry added to diary');
+      Alert.alert('Success', 'Entry added to diary (shared globally)');
     },
   });
 
   const deleteManualEntryMutation = useMutation({
     mutationFn: async (entryId: string) => {
+      if (isGlobalStorageAvailable()) {
+        try {
+          await deleteGlobalManualEntry(entryId);
+          console.log('[Worklist] Deleted entry from global DB');
+          const globalEntries = await getGlobalManualEntries();
+          return globalEntries;
+        } catch (e) {
+          console.warn('[Worklist] Global delete failed, deleting locally:', e);
+        }
+      }
       const current = manualEntries;
       const updated = current.filter(e => e.id !== entryId);
       await AsyncStorage.setItem(MANUAL_ENTRIES_KEY, JSON.stringify(updated));
@@ -192,6 +241,14 @@ export default function WorklistScreen() {
 
   const saveUrlMutation = useMutation({
     mutationFn: async (url: string) => {
+      if (isGlobalStorageAvailable()) {
+        try {
+          await saveGlobalWorklistUrl(url);
+          console.log('[Worklist] Saved URL to global DB');
+        } catch (e) {
+          console.warn('[Worklist] Global URL save failed, saving locally:', e);
+        }
+      }
       await AsyncStorage.setItem(WORKLIST_URL_KEY, url);
       return url;
     },
@@ -199,7 +256,7 @@ export default function WorklistScreen() {
       queryClient.setQueryData(['worklist-url'], url);
       void queryClient.invalidateQueries({ queryKey: ['worklist'] });
       setShowUrlConfig(false);
-      Alert.alert('Success', 'Spreadsheet URL saved. Refreshing diary...');
+      Alert.alert('Success', 'Spreadsheet URL saved globally. All users will see this diary.');
     },
   });
 
