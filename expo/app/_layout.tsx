@@ -33,9 +33,10 @@ function RootLayoutNav() {
   useEffect(() => {
     if (isLoading) return;
     const inAuthGroup = segments[0] === '(tabs)';
+    const isPortal = segments[0] === 'portal';
     if (!user && inAuthGroup) {
       router.replace('/login' as never);
-    } else if (user && !inAuthGroup) {
+    } else if (user && !inAuthGroup && !isPortal) {
       router.replace('/(tabs)');
     }
   }, [user, isLoading, segments, router]);
