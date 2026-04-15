@@ -280,7 +280,7 @@ export default function MedicalAidFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string }>();
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
@@ -376,13 +376,21 @@ export default function MedicalAidFormScreen() {
           const stripped = params.wl_dateOfProcedure.replace(/\//g, '');
           if (stripped.length === 8) freshForm.date = stripped;
         }
+        if (params.wl_mainMemberTitle) {
+          const validTitles: Title[] = ['Mr', 'Mrs', 'Miss', 'Ms', 'Dr', 'Prof'];
+          const matched = validTitles.find(t => t.toLowerCase() === params.wl_mainMemberTitle?.toLowerCase());
+          if (matched) freshForm.mainMemberTitle = matched;
+        }
+        if (params.wl_mainMemberFirstName) freshForm.mainMemberFirstName = params.wl_mainMemberFirstName;
+        if (params.wl_mainMemberLastName) freshForm.mainMemberLastName = params.wl_mainMemberLastName;
+        if (params.wl_mainMemberIdNumber) freshForm.mainMemberIdNumber = params.wl_mainMemberIdNumber;
       }
 
       setFormData(freshForm);
       setCurrentFormId(null);
       hasUnsavedChangesRef.current = false;
     }
-  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_membershipNumber, params.wl_dependantCode, params.wl_dateOfProcedure]);
+  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_medicalAidPlan, params.wl_membershipNumber, params.wl_dependantCode, params.wl_dateOfProcedure, params.wl_mainMemberTitle, params.wl_mainMemberFirstName, params.wl_mainMemberLastName, params.wl_mainMemberIdNumber, params.wl_referringDoctor, params.wl_doctorPracticeNumber]);
 
   useEffect(() => {
     const hasData = Boolean(

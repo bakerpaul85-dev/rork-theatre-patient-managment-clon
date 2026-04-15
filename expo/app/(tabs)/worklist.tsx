@@ -404,12 +404,18 @@ export default function WorklistScreen() {
     if (patient.procedure) params.wl_procedure = patient.procedure;
     if (patient.icd10Code) params.wl_icd10 = patient.icd10Code;
     if (patient.dateOfProcedure) params.wl_dateOfProcedure = patient.dateOfProcedure;
+    if (patient.mainMemberTitle) params.wl_mainMemberTitle = patient.mainMemberTitle;
+    if (patient.mainMemberFirstName) params.wl_mainMemberFirstName = patient.mainMemberFirstName;
+    if (patient.mainMemberLastName) params.wl_mainMemberLastName = patient.mainMemberLastName;
+    if (patient.mainMemberIdNumber) params.wl_mainMemberIdNumber = patient.mainMemberIdNumber;
+    if (patient.referringDoctor) params.wl_referringDoctor = patient.referringDoctor;
+    if (patient.doctorPracticeNumber) params.wl_doctorPracticeNumber = patient.doctorPracticeNumber;
 
     if (formType === 'medical-aid') {
       if (patient.medicalAidName) params.wl_medicalAid = patient.medicalAidName;
+      if (patient.medicalAidPlan) params.wl_medicalAidPlan = patient.medicalAidPlan;
       if (patient.membershipNumber) params.wl_membershipNumber = patient.membershipNumber;
       if (patient.dependantCode) params.wl_dependantCode = patient.dependantCode;
-      if (patient.dateOfProcedure) params.wl_dateOfProcedure = patient.dateOfProcedure;
       router.push({ pathname: '/(tabs)/medical-aid', params } as any);
     } else {
       if (patient.coidaNumber) params.wl_coidaNumber = patient.coidaNumber;

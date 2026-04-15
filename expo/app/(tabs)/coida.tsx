@@ -133,7 +133,7 @@ export default function COIDAFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm, generateExcelExport } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_dateOfProcedure?: string; wl_coidaNumber?: string; wl_iodClaim?: string; wl_employer?: string; wl_employerContact?: string; wl_dateOfIncident?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_dateOfProcedure?: string; wl_coidaNumber?: string; wl_iodClaim?: string; wl_employer?: string; wl_employerContact?: string; wl_dateOfIncident?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string }>();
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
@@ -348,7 +348,7 @@ export default function COIDAFormScreen() {
       setCurrentFormId(null);
       hasUnsavedChangesRef.current = false;
     }
-  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_dateOfProcedure, params.wl_coidaNumber, params.wl_iodClaim, params.wl_employer, params.wl_employerContact, params.wl_dateOfIncident]);
+  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_dateOfProcedure, params.wl_coidaNumber, params.wl_iodClaim, params.wl_employer, params.wl_employerContact, params.wl_dateOfIncident, params.wl_mainMemberTitle, params.wl_mainMemberFirstName, params.wl_mainMemberLastName, params.wl_mainMemberIdNumber, params.wl_referringDoctor, params.wl_doctorPracticeNumber]);
 
   useEffect(() => {
     const hasData = Boolean(

@@ -9,11 +9,20 @@ export interface WorklistPatient {
   dateOfBirth: string;
   contactNumber: string;
   email: string;
+  patientAddress: string;
+  mainMemberTitle: string;
+  mainMemberFirstName: string;
+  mainMemberLastName: string;
+  mainMemberIdNumber: string;
+  mainMemberEmail: string;
+  mainMemberPhone: string;
   medicalAidName: string;
+  medicalAidPlan: string;
   membershipNumber: string;
   dependantCode: string;
   procedure: string;
   icd10Code: string;
+  doctorPracticeNumber: string;
   coidaNumber: string;
   iodClaimNumber: string;
   employerName: string;
@@ -23,6 +32,13 @@ export interface WorklistPatient {
   ward: string;
   hospital: string;
   dateOfProcedure: string;
+  estimatedStartDateTime: string;
+  estimatedEndDateTime: string;
+  actualStartDateTime: string;
+  actualEndDateTime: string;
+  caseType: string;
+  caseComments: string;
+  radiographerComments: string;
   formType: 'medical-aid' | 'coida' | 'unknown';
   rawData: Record<string, string>;
 }
@@ -44,6 +60,8 @@ const COLUMN_MAP: Record<string, keyof WorklistPatient> = {
   'patient_last_name': 'patientLastName',
   'title': 'patientTitle',
   'patient title': 'patientTitle',
+  'patient salutation': 'patientTitle',
+  'salutation': 'patientTitle',
   'id number': 'idNumber',
   'id_number': 'idNumber',
   'id no': 'idNumber',
@@ -53,6 +71,7 @@ const COLUMN_MAP: Record<string, keyof WorklistPatient> = {
   'sa id number': 'idNumber',
   'passport': 'idNumber',
   'passport number': 'idNumber',
+  'patient id number': 'idNumber',
   'date of birth': 'dateOfBirth',
   'dob': 'dateOfBirth',
   'birth date': 'dateOfBirth',
@@ -68,24 +87,43 @@ const COLUMN_MAP: Record<string, keyof WorklistPatient> = {
   'tel': 'contactNumber',
   'telephone': 'contactNumber',
   'contact_number': 'contactNumber',
+  'patient telephone cell': 'contactNumber',
+  'patient telephone home': 'contactNumber',
+  'patient telephone work': 'contactNumber',
   'email': 'email',
   'email address': 'email',
   'e-mail': 'email',
+  'patient email': 'email',
+  'patient address': 'patientAddress',
+  'main member salutation': 'mainMemberTitle',
+  'main member title': 'mainMemberTitle',
+  'main member first name': 'mainMemberFirstName',
+  'main member surname': 'mainMemberLastName',
+  'main member last name': 'mainMemberLastName',
+  'main member id number': 'mainMemberIdNumber',
+  'main member email': 'mainMemberEmail',
+  'main member telephone cell': 'mainMemberPhone',
+  'main member telephone home': 'mainMemberPhone',
+  'main member telephone work': 'mainMemberPhone',
   'medical aid': 'medicalAidName',
   'medical aid name': 'medicalAidName',
   'medical_aid': 'medicalAidName',
   'med aid': 'medicalAidName',
   'scheme': 'medicalAidName',
   'scheme name': 'medicalAidName',
+  'medical aid plan': 'medicalAidPlan',
   'membership number': 'membershipNumber',
   'membership no': 'membershipNumber',
   'member number': 'membershipNumber',
   'member no': 'membershipNumber',
   'membership_number': 'membershipNumber',
+  'medical aid number': 'membershipNumber',
   'dependant code': 'dependantCode',
   'dependant': 'dependantCode',
   'dep code': 'dependantCode',
   'dependent code': 'dependantCode',
+  'dependant number': 'dependantCode',
+  'dependent number': 'dependantCode',
   'procedure': 'procedure',
   'procedures': 'procedure',
   'examination': 'procedure',
@@ -97,6 +135,8 @@ const COLUMN_MAP: Record<string, keyof WorklistPatient> = {
   'icd-10': 'icd10Code',
   'icd 10': 'icd10Code',
   'diagnosis code': 'icd10Code',
+  'doctor practice number': 'doctorPracticeNumber',
+  'practice number': 'doctorPracticeNumber',
   'coida number': 'coidaNumber',
   'coida no': 'coidaNumber',
   'coida': 'coidaNumber',
@@ -128,6 +168,7 @@ const COLUMN_MAP: Record<string, keyof WorklistPatient> = {
   'doctor': 'referringDoctor',
   'referring': 'referringDoctor',
   'surgeon': 'referringDoctor',
+  'name (from doctor surname)': 'referringDoctor',
   'ward': 'ward',
   'theatre': 'ward',
   'location': 'ward',
@@ -139,9 +180,18 @@ const COLUMN_MAP: Record<string, keyof WorklistPatient> = {
   'scheduled date': 'dateOfProcedure',
   'appointment date': 'dateOfProcedure',
   'date': 'dateOfProcedure',
+  'estimated start datetime': 'estimatedStartDateTime',
+  'estimated end datetime': 'estimatedEndDateTime',
+  'actual start datetime': 'actualStartDateTime',
+  'actual end datetime': 'actualEndDateTime',
+  'case type': 'caseType',
+  'case comments': 'caseComments',
+  'radiographer comments': 'radiographerComments',
   'form type': 'formType',
   'type': 'formType',
   'form': 'formType',
+  'case status medical aid': 'formType',
+  'case status wca': 'formType',
 };
 
 const normalizeHeader = (header: string): string => {
@@ -242,11 +292,20 @@ export const parseSpreadsheetData = (data: ArrayBuffer): WorklistPatient[] => {
         dateOfBirth: '',
         contactNumber: '',
         email: '',
+        patientAddress: '',
+        mainMemberTitle: '',
+        mainMemberFirstName: '',
+        mainMemberLastName: '',
+        mainMemberIdNumber: '',
+        mainMemberEmail: '',
+        mainMemberPhone: '',
         medicalAidName: '',
+        medicalAidPlan: '',
         membershipNumber: '',
         dependantCode: '',
         procedure: '',
         icd10Code: '',
+        doctorPracticeNumber: '',
         coidaNumber: '',
         iodClaimNumber: '',
         employerName: '',
@@ -256,6 +315,13 @@ export const parseSpreadsheetData = (data: ArrayBuffer): WorklistPatient[] => {
         ward: '',
         hospital: '',
         dateOfProcedure: '',
+        estimatedStartDateTime: '',
+        estimatedEndDateTime: '',
+        actualStartDateTime: '',
+        actualEndDateTime: '',
+        caseType: '',
+        caseComments: '',
+        radiographerComments: '',
         formType: 'unknown',
         rawData,
       };
@@ -419,11 +485,20 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
           dateOfBirth: '',
           contactNumber: '',
           email: '',
+          patientAddress: '',
+          mainMemberTitle: '',
+          mainMemberFirstName: '',
+          mainMemberLastName: '',
+          mainMemberIdNumber: '',
+          mainMemberEmail: '',
+          mainMemberPhone: '',
           medicalAidName: '',
+          medicalAidPlan: '',
           membershipNumber: '',
           dependantCode: '',
           procedure: '',
           icd10Code: '',
+          doctorPracticeNumber: '',
           coidaNumber: '',
           iodClaimNumber: '',
           employerName: '',
@@ -433,23 +508,50 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
           ward: '',
           hospital: '',
           dateOfProcedure: '',
+          estimatedStartDateTime: '',
+          estimatedEndDateTime: '',
+          actualStartDateTime: '',
+          actualEndDateTime: '',
+          caseType: '',
+          caseComments: '',
+          radiographerComments: '',
           formType: 'unknown',
           rawData,
         };
 
         for (const [fieldName, fieldValue] of Object.entries(fields)) {
           if (fieldValue == null) continue;
+
+          const stringValue = Array.isArray(fieldValue)
+            ? fieldValue.map(v => typeof v === 'object' ? '' : String(v)).filter(Boolean).join(', ')
+            : (typeof fieldValue === 'object' ? '' : String(fieldValue).trim());
+
           const mappedField = normalizeAirtableFieldName(fieldName);
           if (mappedField) {
             if (mappedField === 'formType') {
-              const val = String(fieldValue).toLowerCase().trim();
-              if (val.includes('coida') || val.includes('compensation') || val.includes('iod')) {
+              const val = stringValue.toLowerCase();
+              if (val.includes('coida') || val.includes('compensation') || val.includes('iod') || val.includes('wca')) {
                 patient.formType = 'coida';
               } else if (val.includes('medical') || val.includes('med aid')) {
                 patient.formType = 'medical-aid';
               }
+            } else if (mappedField === 'estimatedStartDateTime' || mappedField === 'estimatedEndDateTime' || mappedField === 'actualStartDateTime' || mappedField === 'actualEndDateTime') {
+              (patient as any)[mappedField] = stringValue;
+              if (mappedField === 'estimatedStartDateTime' && stringValue && !patient.dateOfProcedure) {
+                const d = new Date(stringValue);
+                if (!isNaN(d.getTime())) {
+                  const day = String(d.getDate()).padStart(2, '0');
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const year = d.getFullYear();
+                  patient.dateOfProcedure = `${day}/${month}/${year}`;
+                }
+              }
+            } else if (mappedField === 'contactNumber' && patient.contactNumber && patient.contactNumber.length > 0) {
+              // skip if already set (prefer cell over home/work)
+            } else if (mappedField === 'mainMemberPhone' && patient.mainMemberPhone && patient.mainMemberPhone.length > 0) {
+              // skip if already set
             } else {
-              (patient as any)[mappedField] = String(fieldValue).trim();
+              (patient as any)[mappedField] = stringValue;
             }
           }
         }
