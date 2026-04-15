@@ -13,6 +13,8 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,12 +37,30 @@ import {
   Clock,
   Stethoscope,
   Activity,
+  Plus,
+  Trash2,
 } from 'lucide-react-native';
 import { fetchWorklist, WorklistPatient } from '@/utils/worklistService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WORKLIST_URL_KEY = '@worklist_spreadsheet_url';
+const MANUAL_ENTRIES_KEY = '@worklist_manual_entries';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+interface ManualEntryForm {
+  patientFirstName: string;
+  patientLastName: string;
+  patientTitle: string;
+  idNumber: string;
+  contactNumber: string;
+  procedure: string;
+  referringDoctor: string;
+  hospital: string;
+  ward: string;
+  medicalAidName: string;
+  membershipNumber: string;
+  notes: string;
+}
 
 interface DiaryDay {
   date: string;
@@ -87,12 +107,29 @@ const getTodayKey = (): string => {
   return `${y}-${m}-${d}`;
 };
 
+const emptyManualForm: ManualEntryForm = {
+  patientFirstName: '',
+  patientLastName: '',
+  patientTitle: '',
+  idNumber: '',
+  contactNumber: '',
+  procedure: '',
+  referringDoctor: '',
+  hospital: '',
+  ward: '',
+  medicalAidName: '',
+  membershipNumber: '',
+  notes: '',
+};
+
 export default function WorklistScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [searchText, setSearchText] = useState<string>('');
   const [selectedPatient, setSelectedPatient] = useState<WorklistPatient | null>(null);
   const [showUrlConfig, setShowUrlConfig] = useState<boolean>(false);
+  const [showAddEntry, setShowAddEntry] = useState<boolean>(false);
+  const [manualForm, setManualForm] = useState<ManualEntryForm>({ ...emptyManualForm });
   const [urlInput, setUrlInput] = useState<string>('');
   const [selectedDateKey, setSelectedDateKey] = useState<string>(getTodayKey());
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -106,6 +143,44 @@ export default function WorklistScreen() {
   });
 
   const spreadsheetUrl = savedUrlQuery.data || '';
+
+  const manualEntriesQuery = useQuery({
+    queryKey: ['manual-entries'],
+    queryFn: async () => {
+      const stored = await AsyncStorage.getItem(MANUAL_ENTRIES_KEY);
+      return stored ? (JSON.parse(stored) as WorklistPatient[]) : [];
+    },
+  });
+
+  const manualEntries = useMemo(() => manualEntriesQuery.data || [], [manualEntriesQuery.data]);
+
+  const saveManualEntryMutation = useMutation({
+    mutationFn: async (entry: WorklistPatient) => {
+      const current = manualEntries;
+      const updated = [...current, entry];
+      await AsyncStorage.setItem(MANUAL_ENTRIES_KEY, JSON.stringify(updated));
+      return updated;
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['manual-entries'], updated);
+      setShowAddEntry(false);
+      setManualForm({ ...emptyManualForm });
+      Alert.alert('Success', 'Entry added to diary');
+    },
+  });
+
+  const deleteManualEntryMutation = useMutation({
+    mutationFn: async (entryId: string) => {
+      const current = manualEntries;
+      const updated = current.filter(e => e.id !== entryId);
+      await AsyncStorage.setItem(MANUAL_ENTRIES_KEY, JSON.stringify(updated));
+      return updated;
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['manual-entries'], updated);
+      setSelectedPatient(null);
+    },
+  });
 
   const worklistQuery = useQuery({
     queryKey: ['worklist', spreadsheetUrl],
@@ -128,7 +203,10 @@ export default function WorklistScreen() {
     },
   });
 
-  const patients = useMemo(() => worklistQuery.data || [], [worklistQuery.data]);
+  const patients = useMemo(() => {
+    const sheetPatients = worklistQuery.data || [];
+    return [...sheetPatients, ...manualEntries];
+  }, [worklistQuery.data, manualEntries]);
 
   const diaryDays = useMemo(() => {
     const todayKey = getTodayKey();
@@ -289,6 +367,79 @@ export default function WorklistScreen() {
     setShowUrlConfig(true);
   }, [spreadsheetUrl]);
 
+  const handleOpenAddEntry = useCallback(() => {
+    const parts = selectedDateKey.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    setManualForm({ ...emptyManualForm });
+    setShowAddEntry(true);
+  }, [selectedDateKey]);
+
+  const handleSaveManualEntry = useCallback(() => {
+    if (!manualForm.patientFirstName.trim() && !manualForm.patientLastName.trim()) {
+      Alert.alert('Required', 'Please enter at least a patient name.');
+      return;
+    }
+
+    const parts = selectedDateKey.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const dateStr = `${day}/${month}/${year}`;
+
+    const entry: WorklistPatient = {
+      id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      patientFirstName: manualForm.patientFirstName.trim(),
+      patientLastName: manualForm.patientLastName.trim(),
+      patientTitle: manualForm.patientTitle.trim(),
+      idNumber: manualForm.idNumber.trim(),
+      dateOfBirth: '',
+      contactNumber: manualForm.contactNumber.trim(),
+      email: '',
+      medicalAidName: manualForm.medicalAidName.trim(),
+      membershipNumber: manualForm.membershipNumber.trim(),
+      dependantCode: '',
+      procedure: manualForm.procedure.trim(),
+      icd10Code: '',
+      coidaNumber: '',
+      iodClaimNumber: '',
+      employerName: '',
+      employerContact: '',
+      dateOfIncident: '',
+      referringDoctor: manualForm.referringDoctor.trim(),
+      ward: manualForm.ward.trim(),
+      hospital: manualForm.hospital.trim(),
+      dateOfProcedure: dateStr,
+      formType: manualForm.medicalAidName ? 'medical-aid' : 'unknown',
+      rawData: { notes: manualForm.notes.trim(), source: 'manual' },
+    };
+
+    console.log('[Worklist] Saving manual entry:', entry);
+    saveManualEntryMutation.mutate(entry);
+  }, [manualForm, selectedDateKey, saveManualEntryMutation]);
+
+  const handleDeleteManualEntry = useCallback((patient: WorklistPatient) => {
+    Alert.alert(
+      'Delete Entry',
+      `Remove ${patient.patientFirstName} ${patient.patientLastName} from diary?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteManualEntryMutation.mutate(patient.id),
+        },
+      ]
+    );
+  }, [deleteManualEntryMutation]);
+
+  const updateFormField = useCallback((field: keyof ManualEntryForm, value: string) => {
+    setManualForm(prev => ({ ...prev, [field]: value }));
+  }, []);
+
   const getFormTypeBadge = (formType: string) => {
     if (formType === 'coida') {
       return { label: 'COIDA', color: '#D97706', bg: '#FEF3C7' };
@@ -309,6 +460,8 @@ export default function WorklistScreen() {
     const fullName = `${item.patientFirstName} ${item.patientLastName}`.trim();
     const timelineColor = getTimelineColor(index);
 
+    const isManual = item.id.startsWith('manual_');
+
     return (
       <TouchableOpacity
         style={styles.diaryEntry}
@@ -323,7 +476,7 @@ export default function WorklistScreen() {
           )}
         </View>
 
-        <View style={styles.entryContent}>
+        <View style={[styles.entryContent, isManual && styles.entryContentManual]}>
           <View style={styles.entryHeader}>
             <View style={styles.entryPatientInfo}>
               <Text style={styles.entryPatientName} numberOfLines={1}>
@@ -381,13 +534,22 @@ export default function WorklistScreen() {
           </View>
 
           <View style={styles.entryFooter}>
-            <Text style={styles.tapHint}>Tap to load into form</Text>
-            <ChevronRight size={14} color="#D1D5DB" />
+            <View style={styles.entryFooterLeft}>
+              {isManual && (
+                <View style={styles.manualBadge}>
+                  <Text style={styles.manualBadgeText}>Manual</Text>
+                </View>
+              )}
+              {item.rawData?.notes ? (
+                <Text style={styles.entryNotes} numberOfLines={1}>{item.rawData.notes}</Text>
+              ) : null}
+            </View>
+            <Text style={styles.tapHint}>Tap to load</Text>
           </View>
         </View>
       </TouchableOpacity>
     );
-  }, [handleSelectPatient, selectedDayData]);
+  }, [handleSelectPatient, selectedDayData, handleDeleteManualEntry]);
 
   const renderEmptyDay = () => {
     if (!spreadsheetUrl) {
@@ -635,10 +797,224 @@ export default function WorklistScreen() {
                   </View>
                   <ChevronRight size={20} color="#D1D5DB" />
                 </TouchableOpacity>
+
+                {selectedPatient.id.startsWith('manual_') && (
+                  <TouchableOpacity
+                    style={styles.deleteEntryButton}
+                    onPress={() => handleDeleteManualEntry(selectedPatient)}
+                    testID="delete-manual-entry"
+                  >
+                    <Trash2 size={16} color="#EF4444" />
+                    <Text style={styles.deleteEntryText}>Delete Manual Entry</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={showAddEntry}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddEntry(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.addEntryModalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Entry</Text>
+              <TouchableOpacity onPress={() => setShowAddEntry(false)} testID="close-add-modal">
+                <X size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.addEntryDateLabel}>
+              {selectedDateDisplay}
+            </Text>
+
+            <ScrollView style={styles.addEntryScroll} showsVerticalScrollIndicator={false}>
+              <View style={styles.formRow}>
+                <View style={styles.formFieldSmall}>
+                  <Text style={styles.formLabel}>Title</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.patientTitle}
+                    onChangeText={(v) => updateFormField('patientTitle', v)}
+                    placeholder="Mr/Mrs"
+                    placeholderTextColor="#C4C9D4"
+                    testID="manual-title"
+                  />
+                </View>
+                <View style={styles.formFieldLarge}>
+                  <Text style={styles.formLabel}>First Name *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.patientFirstName}
+                    onChangeText={(v) => updateFormField('patientFirstName', v)}
+                    placeholder="First name"
+                    placeholderTextColor="#C4C9D4"
+                    testID="manual-first-name"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Last Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={manualForm.patientLastName}
+                  onChangeText={(v) => updateFormField('patientLastName', v)}
+                  placeholder="Last name"
+                  placeholderTextColor="#C4C9D4"
+                  testID="manual-last-name"
+                />
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={styles.formFieldHalf}>
+                  <Text style={styles.formLabel}>ID Number</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.idNumber}
+                    onChangeText={(v) => updateFormField('idNumber', v)}
+                    placeholder="ID number"
+                    placeholderTextColor="#C4C9D4"
+                    keyboardType="numeric"
+                    testID="manual-id"
+                  />
+                </View>
+                <View style={styles.formFieldHalf}>
+                  <Text style={styles.formLabel}>Contact</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.contactNumber}
+                    onChangeText={(v) => updateFormField('contactNumber', v)}
+                    placeholder="Phone number"
+                    placeholderTextColor="#C4C9D4"
+                    keyboardType="phone-pad"
+                    testID="manual-contact"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Procedure</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={manualForm.procedure}
+                  onChangeText={(v) => updateFormField('procedure', v)}
+                  placeholder="e.g. X-ray left knee"
+                  placeholderTextColor="#C4C9D4"
+                  testID="manual-procedure"
+                />
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={styles.formFieldHalf}>
+                  <Text style={styles.formLabel}>Referring Doctor</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.referringDoctor}
+                    onChangeText={(v) => updateFormField('referringDoctor', v)}
+                    placeholder="Doctor name"
+                    placeholderTextColor="#C4C9D4"
+                    testID="manual-doctor"
+                  />
+                </View>
+                <View style={styles.formFieldHalf}>
+                  <Text style={styles.formLabel}>Ward / Theatre</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.ward}
+                    onChangeText={(v) => updateFormField('ward', v)}
+                    placeholder="Ward"
+                    placeholderTextColor="#C4C9D4"
+                    testID="manual-ward"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Hospital / Facility</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={manualForm.hospital}
+                  onChangeText={(v) => updateFormField('hospital', v)}
+                  placeholder="Hospital name"
+                  placeholderTextColor="#C4C9D4"
+                  testID="manual-hospital"
+                />
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={styles.formFieldHalf}>
+                  <Text style={styles.formLabel}>Medical Aid</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.medicalAidName}
+                    onChangeText={(v) => updateFormField('medicalAidName', v)}
+                    placeholder="Scheme name"
+                    placeholderTextColor="#C4C9D4"
+                    testID="manual-med-aid"
+                  />
+                </View>
+                <View style={styles.formFieldHalf}>
+                  <Text style={styles.formLabel}>Member No.</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={manualForm.membershipNumber}
+                    onChangeText={(v) => updateFormField('membershipNumber', v)}
+                    placeholder="Membership #"
+                    placeholderTextColor="#C4C9D4"
+                    testID="manual-member-no"
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.formField, { marginBottom: 24 }]}>
+                <Text style={styles.formLabel}>Notes</Text>
+                <TextInput
+                  style={[styles.formInput, styles.formInputMulti]}
+                  value={manualForm.notes}
+                  onChangeText={(v) => updateFormField('notes', v)}
+                  placeholder="Additional notes..."
+                  placeholderTextColor="#C4C9D4"
+                  multiline
+                  numberOfLines={3}
+                  testID="manual-notes"
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.addEntryButtons}>
+              <TouchableOpacity
+                style={styles.addEntryCancelBtn}
+                onPress={() => setShowAddEntry(false)}
+              >
+                <Text style={styles.addEntryCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.addEntrySaveBtn,
+                  (!manualForm.patientFirstName.trim() && !manualForm.patientLastName.trim()) && styles.addEntrySaveBtnDisabled,
+                ]}
+                onPress={handleSaveManualEntry}
+                disabled={saveManualEntryMutation.isPending}
+                testID="save-manual-entry"
+              >
+                {saveManualEntryMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.addEntrySaveText}>Add Entry</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -701,6 +1077,15 @@ export default function WorklistScreen() {
           </View>
         </View>
       </Modal>
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={handleOpenAddEntry}
+        activeOpacity={0.85}
+        testID="add-entry-fab"
+      >
+        <Plus size={24} color="#FFFFFF" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -1185,6 +1570,153 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   urlSaveText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#0F172A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  entryContentManual: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#10B981',
+  },
+  manualBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  manualBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#059669',
+  },
+  entryFooterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  entryNotes: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontStyle: 'italic' as const,
+    flex: 1,
+  },
+  deleteEntryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#FEE2E2',
+  },
+  deleteEntryText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#EF4444',
+  },
+  addEntryModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    maxHeight: '85%',
+  },
+  addEntryDateLabel: {
+    fontSize: 14,
+    color: '#0EA5E9',
+    fontWeight: '600' as const,
+    marginBottom: 16,
+    backgroundColor: '#EFF6FF',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  addEntryScroll: {
+    maxHeight: 400,
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  formField: {
+    marginBottom: 12,
+  },
+  formFieldSmall: {
+    width: 80,
+  },
+  formFieldLarge: {
+    flex: 1,
+  },
+  formFieldHalf: {
+    flex: 1,
+  },
+  formLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#6B7280',
+    marginBottom: 5,
+  },
+  formInput: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  formInputMulti: {
+    minHeight: 70,
+    textAlignVertical: 'top',
+  },
+  addEntryButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  addEntryCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  addEntryCancelText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#6B7280',
+  },
+  addEntrySaveBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: '#0F172A',
+    alignItems: 'center',
+  },
+  addEntrySaveBtnDisabled: {
+    opacity: 0.4,
+  },
+  addEntrySaveText: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: '#FFFFFF',
