@@ -12,13 +12,13 @@ import {
 import { useForms, FormData } from '@/contexts/FormsContext';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Clock, CheckCircle, Trash2, X, ChevronDown } from 'lucide-react-native';
+import { FileText, Clock, CheckCircle, Trash2, X, ChevronDown, RefreshCw } from 'lucide-react-native';
 import { CaseStatusBadge, CaseStatusSelector } from '@/components/CaseTracker';
 import CaseTracker from '@/components/CaseTracker';
 import { CaseStatus, getCaseStatusConfig } from '@/constants/caseStatus';
 
 export default function FormsListScreen() {
-  const { getDrafts, getSubmittedForms, deleteForm, updateCaseStatus } = useForms();
+  const { getDrafts, getSubmittedForms, deleteForm, updateCaseStatus, resubmitForm } = useForms();
   const { user } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'drafts' | 'submitted'>('drafts');
@@ -156,12 +156,44 @@ export default function FormsListScreen() {
             </>
           )}
           {form.status === 'submitted' && (
-            <TouchableOpacity
-              style={styles.viewButton}
-              onPress={() => handleContinueForm(form)}
-            >
-              <Text style={styles.viewButtonText}>View</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={styles.viewButton}
+                onPress={() => handleContinueForm(form)}
+              >
+                <Text style={styles.viewButtonText}>View</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.resendButton}
+                onPress={() => {
+                  const patientName = `${form.patientTitle} ${form.patientFirstName} ${form.patientLastName}`.trim() || 'Unnamed Patient';
+                  Alert.alert(
+                    'Resend Form',
+                    `This will move the form for ${patientName} back to drafts so you can edit and resubmit it.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Resend',
+                        onPress: async () => {
+                          try {
+                            await resubmitForm(form.id);
+                            setActiveTab('drafts');
+                            Alert.alert('Success', 'Form moved to drafts. You can now edit and resubmit it.');
+                          } catch (error) {
+                            console.error('Error resubmitting form:', error);
+                            Alert.alert('Error', 'Failed to resend form. Please try again.');
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }}
+                testID={`resend-btn-${form.id}`}
+              >
+                <RefreshCw size={18} color="#0066CC" />
+                <Text style={styles.resendButtonText}>Resend</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </View>
@@ -440,6 +472,23 @@ const styles = StyleSheet.create({
   viewButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  resendButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0066CC',
+  },
+  resendButtonText: {
+    color: '#0066CC',
+    fontSize: 14,
     fontWeight: '600' as const,
   },
   deleteButton: {

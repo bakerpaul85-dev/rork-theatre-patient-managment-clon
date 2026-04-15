@@ -90,6 +90,7 @@ interface FormsContextValue {
   generateExcelExport: (form: FormData) => Promise<string>;
   sharePDF: (form: FormData) => Promise<void>;
   updateCaseStatus: (id: string, caseStatus: CaseStatus, updatedBy?: string) => Promise<void>;
+  resubmitForm: (id: string) => Promise<void>;
 }
 
 const FORMS_INDEX_KEY = '@patient_forms_index';
@@ -870,6 +871,23 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     return generateClaimSpreadsheet(form);
   }, []);
 
+  const resubmitForm = useCallback(async (id: string) => {
+    const now = new Date().toISOString();
+    const updatedForms = forms.map(form => {
+      if (form.id !== id) return form;
+      const history = [...(form.caseStatusHistory || []), { status: 'case_started' as CaseStatus, timestamp: now, updatedBy: 'Resend' }];
+      return {
+        ...form,
+        status: 'draft' as const,
+        caseStatus: 'case_started' as CaseStatus,
+        caseStatusHistory: history,
+        updatedAt: now,
+      };
+    });
+    await saveForms(updatedForms);
+    console.log(`[FormsContext] Form ${id} moved back to draft for resubmission`);
+  }, [forms, saveForms]);
+
   const updateCaseStatus = useCallback(async (id: string, caseStatus: CaseStatus, updatedBy?: string) => {
     const now = new Date().toISOString();
     const updatedForms = forms.map(form => {
@@ -1037,5 +1055,6 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     generateExcelExport,
     sharePDF,
     updateCaseStatus,
-  }), [forms, isLoading, saveDraft, updateDraft, submitForm, deleteForm, getForm, getDrafts, getSubmittedForms, generateExcelExport, sharePDF, updateCaseStatus]);
+    resubmitForm,
+  }), [forms, isLoading, saveDraft, updateDraft, submitForm, deleteForm, getForm, getDrafts, getSubmittedForms, generateExcelExport, sharePDF, updateCaseStatus, resubmitForm]);
 });
