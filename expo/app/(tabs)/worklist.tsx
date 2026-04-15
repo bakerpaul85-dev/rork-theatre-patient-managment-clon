@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,12 +10,14 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  ScrollView,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
-  UserPlus,
   FileText,
   ClipboardList,
   RefreshCw,
@@ -26,13 +28,64 @@ import {
   Building2,
   Calendar,
   ChevronRight,
+  ChevronLeft,
   AlertCircle,
   Settings,
+  BookOpen,
+  Clock,
+  Stethoscope,
+  Activity,
 } from 'lucide-react-native';
 import { fetchWorklist, WorklistPatient } from '@/utils/worklistService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WORKLIST_URL_KEY = '@worklist_spreadsheet_url';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+interface DiaryDay {
+  date: string;
+  displayDate: string;
+  dayName: string;
+  dayNumber: string;
+  monthYear: string;
+  patients: WorklistPatient[];
+  isToday: boolean;
+}
+
+const formatDateKey = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+  }
+  return dateStr;
+};
+
+const parseToDate = (dateStr: string): Date | null => {
+  if (!dateStr) return null;
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const year = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+const getTodayKey = (): string => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 export default function WorklistScreen() {
   const router = useRouter();
@@ -41,6 +94,8 @@ export default function WorklistScreen() {
   const [selectedPatient, setSelectedPatient] = useState<WorklistPatient | null>(null);
   const [showUrlConfig, setShowUrlConfig] = useState<boolean>(false);
   const [urlInput, setUrlInput] = useState<string>('');
+  const [selectedDateKey, setSelectedDateKey] = useState<string>(getTodayKey());
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const savedUrlQuery = useQuery({
     queryKey: ['worklist-url'],
@@ -69,26 +124,131 @@ export default function WorklistScreen() {
       queryClient.setQueryData(['worklist-url'], url);
       void queryClient.invalidateQueries({ queryKey: ['worklist'] });
       setShowUrlConfig(false);
-      Alert.alert('Success', 'Spreadsheet URL saved. Refreshing worklist...');
+      Alert.alert('Success', 'Spreadsheet URL saved. Refreshing diary...');
     },
   });
 
   const patients = useMemo(() => worklistQuery.data || [], [worklistQuery.data]);
 
-  const filteredPatients = useMemo(() => {
-    if (!searchText.trim()) return patients;
-    const lower = searchText.toLowerCase();
-    return patients.filter((p) => {
-      const fullName = `${p.patientFirstName} ${p.patientLastName}`.toLowerCase();
-      const idMatch = p.idNumber.toLowerCase().includes(lower);
-      const nameMatch = fullName.includes(lower);
-      const procedureMatch = p.procedure.toLowerCase().includes(lower);
-      const employerMatch = p.employerName.toLowerCase().includes(lower);
-      const coidaMatch = p.coidaNumber.toLowerCase().includes(lower);
-      const medAidMatch = p.medicalAidName.toLowerCase().includes(lower);
-      return nameMatch || idMatch || procedureMatch || employerMatch || coidaMatch || medAidMatch;
+  const diaryDays = useMemo(() => {
+    const todayKey = getTodayKey();
+    const grouped: Record<string, WorklistPatient[]> = {};
+
+    for (const p of patients) {
+      const dateField = p.dateOfProcedure || p.dateOfIncident || '';
+      const key = formatDateKey(dateField) || 'unscheduled';
+
+      if (searchText.trim()) {
+        const lower = searchText.toLowerCase();
+        const fullName = `${p.patientFirstName} ${p.patientLastName}`.toLowerCase();
+        const match =
+          fullName.includes(lower) ||
+          p.idNumber.toLowerCase().includes(lower) ||
+          p.procedure.toLowerCase().includes(lower) ||
+          p.employerName.toLowerCase().includes(lower) ||
+          p.medicalAidName.toLowerCase().includes(lower);
+        if (!match) continue;
+      }
+
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(p);
+    }
+
+    const days: DiaryDay[] = [];
+    const sortedKeys = Object.keys(grouped).sort((a, b) => {
+      if (a === 'unscheduled') return 1;
+      if (b === 'unscheduled') return -1;
+      return a.localeCompare(b);
     });
+
+    for (const key of sortedKeys) {
+      if (key === 'unscheduled') {
+        days.push({
+          date: key,
+          displayDate: 'Unscheduled',
+          dayName: '',
+          dayNumber: '?',
+          monthYear: 'No Date',
+          patients: grouped[key],
+          isToday: false,
+        });
+        continue;
+      }
+
+      const parts = key.split('-');
+      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      if (isNaN(d.getTime())) continue;
+
+      days.push({
+        date: key,
+        displayDate: `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+        dayName: DAY_NAMES[d.getDay()],
+        dayNumber: String(d.getDate()),
+        monthYear: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+        patients: grouped[key],
+        isToday: key === todayKey,
+      });
+    }
+
+    return days;
   }, [patients, searchText]);
+
+  const weekDates = useMemo(() => {
+    const parts = selectedDateKey.split('-');
+    const selected = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const dayOfWeek = selected.getDay();
+    const monday = new Date(selected);
+    monday.setDate(selected.getDate() - ((dayOfWeek + 6) % 7));
+
+    const todayKey = getTodayKey();
+    const dates: Array<{ key: string; dayShort: string; dayNum: string; isToday: boolean; isSelected: boolean; hasEntries: boolean }> = [];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dates.push({
+        key,
+        dayShort: DAY_SHORT[d.getDay()],
+        dayNum: String(d.getDate()),
+        isToday: key === todayKey,
+        isSelected: key === selectedDateKey,
+        hasEntries: diaryDays.some(dd => dd.date === key),
+      });
+    }
+    return dates;
+  }, [selectedDateKey, diaryDays]);
+
+  const selectedDayData = useMemo(() => {
+    return diaryDays.find(d => d.date === selectedDateKey) || null;
+  }, [diaryDays, selectedDateKey]);
+
+  const selectedDateDisplay = useMemo(() => {
+    const parts = selectedDateKey.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    if (isNaN(d.getTime())) return selectedDateKey;
+    return `${DAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+  }, [selectedDateKey]);
+
+  const navigateWeek = useCallback((direction: 1 | -1) => {
+    const parts = selectedDateKey.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    d.setDate(d.getDate() + direction * 7);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setSelectedDateKey(key);
+  }, [selectedDateKey]);
+
+  const selectDate = useCallback((key: string) => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 0.3, duration: 100, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+    setSelectedDateKey(key);
+  }, [fadeAnim]);
+
+  const goToToday = useCallback(() => {
+    selectDate(getTodayKey());
+  }, [selectDate]);
 
   const handleSelectPatient = useCallback((patient: WorklistPatient) => {
     setSelectedPatient(patient);
@@ -131,88 +291,115 @@ export default function WorklistScreen() {
 
   const getFormTypeBadge = (formType: string) => {
     if (formType === 'coida') {
-      return { label: 'COIDA', color: '#00A3A3', bg: '#E7F9F9' };
+      return { label: 'COIDA', color: '#D97706', bg: '#FEF3C7' };
     }
     if (formType === 'medical-aid') {
-      return { label: 'Medical Aid', color: '#0066CC', bg: '#E8F0FE' };
+      return { label: 'Medical Aid', color: '#0369A1', bg: '#E0F2FE' };
     }
-    return { label: 'Unknown', color: '#6C757D', bg: '#F0F0F0' };
+    return { label: 'Unknown', color: '#6B7280', bg: '#F3F4F6' };
   };
 
-  const renderPatientCard = useCallback(({ item }: { item: WorklistPatient }) => {
+  const getTimelineColor = (index: number): string => {
+    const colors = ['#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+    return colors[index % colors.length];
+  };
+
+  const renderDiaryEntry = useCallback(({ item, index }: { item: WorklistPatient; index: number }) => {
     const badge = getFormTypeBadge(item.formType);
     const fullName = `${item.patientFirstName} ${item.patientLastName}`.trim();
+    const timelineColor = getTimelineColor(index);
 
     return (
       <TouchableOpacity
-        style={styles.patientCard}
+        style={styles.diaryEntry}
         onPress={() => handleSelectPatient(item)}
         activeOpacity={0.7}
+        testID={`diary-entry-${index}`}
       >
-        <View style={styles.cardTop}>
-          <View style={styles.avatarContainer}>
-            <User size={20} color="#FFFFFF" />
+        <View style={styles.timelineIndicator}>
+          <View style={[styles.timelineDot, { backgroundColor: timelineColor }]} />
+          {index < (selectedDayData?.patients.length ?? 0) - 1 && (
+            <View style={[styles.timelineLine, { backgroundColor: timelineColor + '30' }]} />
+          )}
+        </View>
+
+        <View style={styles.entryContent}>
+          <View style={styles.entryHeader}>
+            <View style={styles.entryPatientInfo}>
+              <Text style={styles.entryPatientName} numberOfLines={1}>
+                {item.patientTitle ? `${item.patientTitle} ` : ''}{fullName || 'Unknown Patient'}
+              </Text>
+              {item.idNumber ? (
+                <Text style={styles.entryIdNumber}>{item.idNumber}</Text>
+              ) : null}
+            </View>
+            <View style={[styles.entryBadge, { backgroundColor: badge.bg }]}>
+              <Text style={[styles.entryBadgeText, { color: badge.color }]}>{badge.label}</Text>
+            </View>
           </View>
-          <View style={styles.cardInfo}>
-            <Text style={styles.patientName} numberOfLines={1}>
-              {item.patientTitle ? `${item.patientTitle} ` : ''}{fullName || 'Unknown Patient'}
-            </Text>
-            {item.idNumber ? (
-              <View style={styles.infoRow}>
-                <Hash size={12} color="#8E8E93" />
-                <Text style={styles.infoText}>{item.idNumber}</Text>
+
+          {item.procedure ? (
+            <View style={styles.entryProcedureRow}>
+              <Stethoscope size={13} color="#6B7280" />
+              <Text style={styles.entryProcedureText} numberOfLines={2}>{item.procedure}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.entryDetailsRow}>
+            {item.referringDoctor ? (
+              <View style={styles.entryDetail}>
+                <User size={11} color="#9CA3AF" />
+                <Text style={styles.entryDetailText} numberOfLines={1}>Dr. {item.referringDoctor}</Text>
+              </View>
+            ) : null}
+            {item.ward || item.hospital ? (
+              <View style={styles.entryDetail}>
+                <Building2 size={11} color="#9CA3AF" />
+                <Text style={styles.entryDetailText} numberOfLines={1}>
+                  {[item.ward, item.hospital].filter(Boolean).join(' · ')}
+                </Text>
+              </View>
+            ) : null}
+            {item.contactNumber ? (
+              <View style={styles.entryDetail}>
+                <Phone size={11} color="#9CA3AF" />
+                <Text style={styles.entryDetailText}>{item.contactNumber}</Text>
+              </View>
+            ) : null}
+            {item.medicalAidName ? (
+              <View style={styles.entryDetail}>
+                <Activity size={11} color="#9CA3AF" />
+                <Text style={styles.entryDetailText} numberOfLines={1}>{item.medicalAidName}</Text>
+              </View>
+            ) : null}
+            {item.employerName ? (
+              <View style={styles.entryDetail}>
+                <Building2 size={11} color="#9CA3AF" />
+                <Text style={styles.entryDetailText} numberOfLines={1}>{item.employerName}</Text>
               </View>
             ) : null}
           </View>
-          <View style={[styles.typeBadge, { backgroundColor: badge.bg }]}>
-            <Text style={[styles.typeBadgeText, { color: badge.color }]}>{badge.label}</Text>
+
+          <View style={styles.entryFooter}>
+            <Text style={styles.tapHint}>Tap to load into form</Text>
+            <ChevronRight size={14} color="#D1D5DB" />
           </View>
-        </View>
-
-        <View style={styles.cardBottom}>
-          {item.procedure ? (
-            <View style={styles.detailChip}>
-              <Text style={styles.detailChipText} numberOfLines={1}>{item.procedure}</Text>
-            </View>
-          ) : null}
-          {item.dateOfProcedure ? (
-            <View style={styles.detailChip}>
-              <Calendar size={10} color="#6C757D" />
-              <Text style={styles.detailChipText}>{item.dateOfProcedure}</Text>
-            </View>
-          ) : null}
-          {item.employerName ? (
-            <View style={styles.detailChip}>
-              <Building2 size={10} color="#6C757D" />
-              <Text style={styles.detailChipText} numberOfLines={1}>{item.employerName}</Text>
-            </View>
-          ) : null}
-          {item.medicalAidName ? (
-            <View style={styles.detailChip}>
-              <Text style={styles.detailChipText} numberOfLines={1}>{item.medicalAidName}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={styles.cardArrow}>
-          <ChevronRight size={18} color="#C7C7CC" />
         </View>
       </TouchableOpacity>
     );
-  }, [handleSelectPatient]);
+  }, [handleSelectPatient, selectedDayData]);
 
-  const renderEmpty = () => {
+  const renderEmptyDay = () => {
     if (!spreadsheetUrl) {
       return (
-        <View style={styles.emptyState}>
-          <Settings size={48} color="#C7C7CC" />
-          <Text style={styles.emptyTitle}>No Spreadsheet Configured</Text>
-          <Text style={styles.emptyText}>
-            Tap the gear icon above to set your worklist spreadsheet URL.
-            Supports Google Sheets and OneDrive Excel files.
+        <View style={styles.emptyDay}>
+          <Settings size={40} color="#D1D5DB" />
+          <Text style={styles.emptyDayTitle}>No Spreadsheet Configured</Text>
+          <Text style={styles.emptyDayText}>
+            Connect your OneDrive or Google Sheet to see your daily patient diary.
           </Text>
-          <TouchableOpacity style={styles.configButton} onPress={handleOpenUrlConfig}>
-            <Text style={styles.configButtonText}>Configure Spreadsheet</Text>
+          <TouchableOpacity style={styles.configBtn} onPress={handleOpenUrlConfig}>
+            <Text style={styles.configBtnText}>Configure Spreadsheet</Text>
           </TouchableOpacity>
         </View>
       );
@@ -220,109 +407,158 @@ export default function WorklistScreen() {
 
     if (worklistQuery.isLoading) {
       return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#0066CC" />
-          <Text style={styles.emptyTitle}>Loading Worklist...</Text>
-          <Text style={styles.emptyText}>Fetching patient data from spreadsheet</Text>
+        <View style={styles.emptyDay}>
+          <ActivityIndicator size="large" color="#0EA5E9" />
+          <Text style={styles.emptyDayTitle}>Loading Diary...</Text>
+          <Text style={styles.emptyDayText}>Fetching patient data from your spreadsheet</Text>
         </View>
       );
     }
 
     if (worklistQuery.isError) {
       return (
-        <View style={styles.emptyState}>
-          <AlertCircle size={48} color="#DC3545" />
-          <Text style={styles.emptyTitle}>Failed to Load Worklist</Text>
-          <Text style={styles.emptyText}>
-            {worklistQuery.error instanceof Error ? worklistQuery.error.message : 'Could not fetch spreadsheet data. Check that the URL is publicly accessible.'}
+        <View style={styles.emptyDay}>
+          <AlertCircle size={40} color="#EF4444" />
+          <Text style={styles.emptyDayTitle}>Failed to Load</Text>
+          <Text style={styles.emptyDayText}>
+            {worklistQuery.error instanceof Error ? worklistQuery.error.message : 'Check that the URL is publicly accessible.'}
           </Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => worklistQuery.refetch()}
-          >
-            <RefreshCw size={16} color="#FFFFFF" />
-            <Text style={styles.retryButtonText}>Retry</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => worklistQuery.refetch()}>
+            <RefreshCw size={14} color="#FFF" />
+            <Text style={styles.retryBtnText}>Retry</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.configButton, { marginTop: 8 }]}
-            onPress={handleOpenUrlConfig}
-          >
-            <Text style={styles.configButtonText}>Change URL</Text>
+          <TouchableOpacity style={[styles.configBtn, { marginTop: 8 }]} onPress={handleOpenUrlConfig}>
+            <Text style={styles.configBtnText}>Change URL</Text>
           </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (searchText) {
-      return (
-        <View style={styles.emptyState}>
-          <Search size={48} color="#C7C7CC" />
-          <Text style={styles.emptyTitle}>No Results</Text>
-          <Text style={styles.emptyText}>No patients match "{searchText}"</Text>
         </View>
       );
     }
 
     return (
-      <View style={styles.emptyState}>
-        <UserPlus size={48} color="#C7C7CC" />
-        <Text style={styles.emptyTitle}>No Patients Found</Text>
-        <Text style={styles.emptyText}>The spreadsheet appears to be empty or has no recognizable patient data.</Text>
+      <View style={styles.emptyDay}>
+        <BookOpen size={40} color="#D1D5DB" />
+        <Text style={styles.emptyDayTitle}>No Entries</Text>
+        <Text style={styles.emptyDayText}>No patients scheduled for this day</Text>
       </View>
     );
   };
 
+  const totalPatientsForWeek = useMemo(() => {
+    let count = 0;
+    for (const wd of weekDates) {
+      const day = diaryDays.find(d => d.date === wd.key);
+      if (day) count += day.patients.length;
+    }
+    return count;
+  }, [weekDates, diaryDays]);
+
   return (
     <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <View style={styles.searchInputContainer}>
-          <Search size={18} color="#8E8E93" />
+      <View style={styles.calendarHeader}>
+        <View style={styles.weekNav}>
+          <TouchableOpacity onPress={() => navigateWeek(-1)} style={styles.weekNavBtn} testID="prev-week">
+            <ChevronLeft size={20} color="#374151" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={goToToday} style={styles.todayBtn} testID="today-btn">
+            <Calendar size={14} color="#0EA5E9" />
+            <Text style={styles.todayBtnText}>Today</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigateWeek(1)} style={styles.weekNavBtn} testID="next-week">
+            <ChevronRight size={20} color="#374151" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekStrip}>
+          {weekDates.map((wd) => (
+            <TouchableOpacity
+              key={wd.key}
+              style={[
+                styles.dayCell,
+                wd.isSelected && styles.dayCellSelected,
+                wd.isToday && !wd.isSelected && styles.dayCellToday,
+              ]}
+              onPress={() => selectDate(wd.key)}
+              testID={`day-${wd.key}`}
+            >
+              <Text style={[
+                styles.dayCellLabel,
+                wd.isSelected && styles.dayCellLabelSelected,
+              ]}>
+                {wd.dayShort}
+              </Text>
+              <Text style={[
+                styles.dayCellNum,
+                wd.isSelected && styles.dayCellNumSelected,
+                wd.isToday && !wd.isSelected && styles.dayCellNumToday,
+              ]}>
+                {wd.dayNum}
+              </Text>
+              {wd.hasEntries && !wd.isSelected && (
+                <View style={styles.dayDot} />
+              )}
+              {wd.isSelected && wd.hasEntries && (
+                <View style={styles.dayDotSelected} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={styles.dayHeader}>
+        <View style={styles.dayHeaderLeft}>
+          <Text style={styles.dayHeaderDate}>{selectedDateDisplay}</Text>
+          <Text style={styles.dayHeaderCount}>
+            {selectedDayData ? `${selectedDayData.patients.length} patient${selectedDayData.patients.length !== 1 ? 's' : ''}` : 'No patients'}
+          </Text>
+        </View>
+        <View style={styles.dayHeaderRight}>
+          <TouchableOpacity style={styles.searchToggle} onPress={handleOpenUrlConfig} testID="settings-btn">
+            <Settings size={18} color="#6B7280" />
+          </TouchableOpacity>
+          {worklistQuery.isFetching && (
+            <ActivityIndicator size="small" color="#0EA5E9" style={{ marginLeft: 8 }} />
+          )}
+        </View>
+      </View>
+
+      {searchText || patients.length > 0 ? (
+        <View style={styles.searchBar}>
+          <Search size={16} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
             value={searchText}
             onChangeText={setSearchText}
-            placeholder="Search name, ID, procedure..."
-            placeholderTextColor="#8E8E93"
+            placeholder="Search patients..."
+            placeholderTextColor="#9CA3AF"
             autoCapitalize="none"
             autoCorrect={false}
+            testID="search-input"
           />
           {searchText ? (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <X size={18} color="#8E8E93" />
+            <TouchableOpacity onPress={() => setSearchText('')} testID="clear-search">
+              <X size={16} color="#9CA3AF" />
             </TouchableOpacity>
           ) : null}
         </View>
-        <TouchableOpacity style={styles.gearButton} onPress={handleOpenUrlConfig}>
-          <Settings size={20} color="#0066CC" />
-        </TouchableOpacity>
-      </View>
+      ) : null}
 
-      {patients.length > 0 && (
-        <View style={styles.statsBar}>
-          <Text style={styles.statsText}>
-            {filteredPatients.length} of {patients.length} patient{patients.length !== 1 ? 's' : ''}
-          </Text>
-          {worklistQuery.isFetching && (
-            <ActivityIndicator size="small" color="#0066CC" style={{ marginLeft: 8 }} />
-          )}
-        </View>
-      )}
-
-      <FlatList
-        data={filteredPatients}
-        keyExtractor={(item) => item.id}
-        renderItem={renderPatientCard}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={renderEmpty}
-        refreshControl={
-          <RefreshControl
-            refreshing={worklistQuery.isFetching && !worklistQuery.isLoading}
-            onRefresh={() => worklistQuery.refetch()}
-            tintColor="#0066CC"
-          />
-        }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      <Animated.View style={[styles.diaryContent, { opacity: fadeAnim }]}>
+        <FlatList
+          data={selectedDayData?.patients || []}
+          keyExtractor={(item) => item.id}
+          renderItem={renderDiaryEntry}
+          contentContainerStyle={styles.entriesList}
+          ListEmptyComponent={renderEmptyDay}
+          refreshControl={
+            <RefreshControl
+              refreshing={worklistQuery.isFetching && !worklistQuery.isLoading}
+              onRefresh={() => worklistQuery.refetch()}
+              tintColor="#0EA5E9"
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      </Animated.View>
 
       <Modal
         visible={!!selectedPatient}
@@ -336,14 +572,14 @@ export default function WorklistScreen() {
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Load Patient</Text>
-                  <TouchableOpacity onPress={() => setSelectedPatient(null)}>
-                    <X size={24} color="#333" />
+                  <TouchableOpacity onPress={() => setSelectedPatient(null)} testID="close-modal">
+                    <X size={24} color="#374151" />
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.patientSummary}>
                   <View style={styles.summaryAvatar}>
-                    <User size={28} color="#FFFFFF" />
+                    <User size={26} color="#FFFFFF" />
                   </View>
                   <Text style={styles.summaryName}>
                     {selectedPatient.patientTitle ? `${selectedPatient.patientTitle} ` : ''}
@@ -351,18 +587,20 @@ export default function WorklistScreen() {
                   </Text>
                   {selectedPatient.idNumber ? (
                     <View style={styles.summaryRow}>
-                      <Hash size={14} color="#6C757D" />
+                      <Hash size={13} color="#6B7280" />
                       <Text style={styles.summaryDetail}>{selectedPatient.idNumber}</Text>
                     </View>
                   ) : null}
                   {selectedPatient.contactNumber ? (
                     <View style={styles.summaryRow}>
-                      <Phone size={14} color="#6C757D" />
+                      <Phone size={13} color="#6B7280" />
                       <Text style={styles.summaryDetail}>{selectedPatient.contactNumber}</Text>
                     </View>
                   ) : null}
                   {selectedPatient.procedure ? (
-                    <Text style={styles.summaryProcedure}>{selectedPatient.procedure}</Text>
+                    <View style={styles.summaryProcedureBadge}>
+                      <Text style={styles.summaryProcedure}>{selectedPatient.procedure}</Text>
+                    </View>
                   ) : null}
                 </View>
 
@@ -371,29 +609,31 @@ export default function WorklistScreen() {
                 <TouchableOpacity
                   style={styles.formTypeButton}
                   onPress={() => handleLoadIntoForm(selectedPatient, 'medical-aid')}
+                  testID="load-medical-aid"
                 >
-                  <View style={[styles.formTypeIcon, { backgroundColor: '#E8F0FE' }]}>
-                    <FileText size={22} color="#0066CC" />
+                  <View style={[styles.formTypeIcon, { backgroundColor: '#E0F2FE' }]}>
+                    <FileText size={22} color="#0369A1" />
                   </View>
                   <View style={styles.formTypeInfo}>
                     <Text style={styles.formTypeTitle}>Medical Aid Form</Text>
                     <Text style={styles.formTypeDesc}>Patient with medical aid coverage</Text>
                   </View>
-                  <ChevronRight size={20} color="#C7C7CC" />
+                  <ChevronRight size={20} color="#D1D5DB" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.formTypeButton}
                   onPress={() => handleLoadIntoForm(selectedPatient, 'coida')}
+                  testID="load-coida"
                 >
-                  <View style={[styles.formTypeIcon, { backgroundColor: '#E7F9F9' }]}>
-                    <ClipboardList size={22} color="#00A3A3" />
+                  <View style={[styles.formTypeIcon, { backgroundColor: '#FEF3C7' }]}>
+                    <ClipboardList size={22} color="#D97706" />
                   </View>
                   <View style={styles.formTypeInfo}>
                     <Text style={styles.formTypeTitle}>COIDA Form</Text>
                     <Text style={styles.formTypeDesc}>Compensation for occupational injuries</Text>
                   </View>
-                  <ChevronRight size={20} color="#C7C7CC" />
+                  <ChevronRight size={20} color="#D1D5DB" />
                 </TouchableOpacity>
               </>
             )}
@@ -411,8 +651,8 @@ export default function WorklistScreen() {
           <View style={styles.urlModalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Spreadsheet URL</Text>
-              <TouchableOpacity onPress={() => setShowUrlConfig(false)}>
-                <X size={24} color="#333" />
+              <TouchableOpacity onPress={() => setShowUrlConfig(false)} testID="close-url-modal">
+                <X size={24} color="#374151" />
               </TouchableOpacity>
             </View>
 
@@ -420,21 +660,22 @@ export default function WorklistScreen() {
               Enter the URL of your worklist spreadsheet. Supports:
             </Text>
             <View style={styles.urlHelpList}>
-              <Text style={styles.urlHelpItem}>- Google Sheets (share link or published URL)</Text>
-              <Text style={styles.urlHelpItem}>- OneDrive Excel (sharing link)</Text>
-              <Text style={styles.urlHelpItem}>- Any direct URL to .xlsx or .csv file</Text>
+              <Text style={styles.urlHelpItem}>• OneDrive Excel (sharing link)</Text>
+              <Text style={styles.urlHelpItem}>• Google Sheets (share link or published URL)</Text>
+              <Text style={styles.urlHelpItem}>• Any direct URL to .xlsx or .csv file</Text>
             </View>
 
             <TextInput
               style={styles.urlInput}
               value={urlInput}
               onChangeText={setUrlInput}
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-              placeholderTextColor="#999"
+              placeholder="https://1drv.ms/x/... or Google Sheets URL"
+              placeholderTextColor="#9CA3AF"
               autoCapitalize="none"
               autoCorrect={false}
               multiline
               numberOfLines={3}
+              testID="url-input"
             />
 
             <View style={styles.urlButtons}>
@@ -448,6 +689,7 @@ export default function WorklistScreen() {
                 style={[styles.urlSaveButton, !urlInput.trim() && styles.urlSaveButtonDisabled]}
                 onPress={() => saveUrlMutation.mutate(urlInput.trim())}
                 disabled={!urlInput.trim() || saveUrlMutation.isPending}
+                testID="save-url"
               >
                 {saveUrlMutation.isPending ? (
                   <ActivityIndicator size="small" color="#FFF" />
@@ -466,191 +708,324 @@ export default function WorklistScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F8FAFC',
+  },
+  calendarHeader: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingBottom: 12,
+  },
+  weekNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: 16,
+  },
+  weekNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  todayBtnText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#0EA5E9',
+  },
+  weekStrip: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    gap: 4,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  dayCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+    minWidth: 44,
+    gap: 3,
+  },
+  dayCellSelected: {
+    backgroundColor: '#0F172A',
+  },
+  dayCellToday: {
+    backgroundColor: '#F0F9FF',
+  },
+  dayCellLabel: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: '#9CA3AF',
+    textTransform: 'uppercase' as const,
+  },
+  dayCellLabelSelected: {
+    color: '#94A3B8',
+  },
+  dayCellNum: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#1F2937',
+  },
+  dayCellNumSelected: {
+    color: '#FFFFFF',
+  },
+  dayCellNumToday: {
+    color: '#0EA5E9',
+  },
+  dayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#0EA5E9',
+  },
+  dayDotSelected: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#38BDF8',
+  },
+  dayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dayHeaderLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  dayHeaderDate: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: '#111827',
+  },
+  dayHeaderCount: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
+  dayHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-    gap: 10,
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
     height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#000000',
+    fontSize: 15,
+    color: '#111827',
     height: 40,
   },
-  gearButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#F2F2F7',
-    alignItems: 'center',
-    justifyContent: 'center',
+  diaryContent: {
+    flex: 1,
   },
-  statsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  statsText: {
-    fontSize: 13,
-    color: '#8E8E93',
-    fontWeight: '500' as const,
-  },
-  listContent: {
+  entriesList: {
     padding: 16,
     paddingBottom: 32,
     flexGrow: 1,
   },
-  separator: {
-    height: 10,
+  diaryEntry: {
+    flexDirection: 'row',
+    marginBottom: 4,
   },
-  patientCard: {
+  timelineIndicator: {
+    width: 24,
+    alignItems: 'center',
+    paddingTop: 6,
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+  },
+  entryContent: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    padding: 16,
+    padding: 14,
+    marginLeft: 8,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
-  cardTop: {
+  entryHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  avatarContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#0066CC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardInfo: {
+  entryPatientInfo: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
-  patientName: {
-    fontSize: 17,
+  entryPatientName: {
+    fontSize: 16,
     fontWeight: '600' as const,
-    color: '#1C1C1E',
+    color: '#111827',
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  entryIdNumber: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500' as const,
   },
-  infoText: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-  typeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  typeBadgeText: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-  },
-  cardBottom: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 10,
-    paddingLeft: 52,
-  },
-  detailChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F2F2F7',
+  entryBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
   },
-  detailChipText: {
+  entryBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    letterSpacing: 0.3,
+  },
+  entryProcedureRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F9FAFB',
+  },
+  entryProcedureText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500' as const,
+    lineHeight: 20,
+  },
+  entryDetailsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  entryDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  entryDetailText: {
     fontSize: 12,
-    color: '#6C757D',
+    color: '#9CA3AF',
     maxWidth: 140,
   },
-  cardArrow: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    marginTop: -9,
+  entryFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F9FAFB',
   },
-  emptyState: {
+  tapHint: {
+    fontSize: 11,
+    color: '#D1D5DB',
+    fontWeight: '500' as const,
+  },
+  emptyDay: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 60,
     paddingHorizontal: 40,
   },
-  emptyTitle: {
-    fontSize: 20,
+  emptyDayTitle: {
+    fontSize: 18,
     fontWeight: '700' as const,
-    color: '#1C1C1E',
-    marginTop: 16,
-    marginBottom: 8,
+    color: '#374151',
+    marginTop: 14,
+    marginBottom: 6,
   },
-  emptyText: {
-    fontSize: 15,
-    color: '#8E8E93',
+  emptyDayText: {
+    fontSize: 14,
+    color: '#9CA3AF',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
   },
-  configButton: {
-    marginTop: 20,
-    backgroundColor: '#0066CC',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+  configBtn: {
+    marginTop: 18,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 22,
+    paddingVertical: 11,
     borderRadius: 10,
   },
-  configButtonText: {
+  configBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600' as const,
   },
-  retryButton: {
-    marginTop: 20,
+  retryBtn: {
+    marginTop: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#DC3545',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    gap: 6,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 22,
+    paddingVertical: 11,
     borderRadius: 10,
   },
-  retryButtonText: {
+  retryBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600' as const,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
@@ -669,70 +1044,71 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: '#1C1C1E',
+    color: '#111827',
   },
   patientSummary: {
     alignItems: 'center',
     marginBottom: 24,
   },
   summaryAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#0066CC',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
   },
   summaryName: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700' as const,
-    color: '#1C1C1E',
+    color: '#111827',
     textAlign: 'center',
     marginBottom: 6,
   },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     marginTop: 2,
   },
   summaryDetail: {
-    fontSize: 15,
-    color: '#6C757D',
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  summaryProcedureBadge: {
+    marginTop: 8,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   summaryProcedure: {
-    fontSize: 14,
-    color: '#0066CC',
+    fontSize: 13,
+    color: '#0369A1',
     fontWeight: '500' as const,
-    marginTop: 8,
     textAlign: 'center',
-    backgroundColor: '#E8F0FE',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
-    overflow: 'hidden',
   },
   chooseFormText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600' as const,
-    color: '#8E8E93',
+    color: '#9CA3AF',
     marginBottom: 12,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   formTypeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#F9F9F9',
-    marginBottom: 10,
-    gap: 14,
+    borderRadius: 14,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 8,
+    gap: 12,
   },
   formTypeIcon: {
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -741,14 +1117,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formTypeTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600' as const,
-    color: '#1C1C1E',
+    color: '#111827',
     marginBottom: 2,
   },
   formTypeDesc: {
-    fontSize: 13,
-    color: '#8E8E93',
+    fontSize: 12,
+    color: '#9CA3AF',
   },
   urlModalContainer: {
     backgroundColor: '#FFFFFF',
@@ -757,57 +1133,59 @@ const styles = StyleSheet.create({
   },
   urlHelpText: {
     fontSize: 14,
-    color: '#6C757D',
+    color: '#6B7280',
     marginBottom: 8,
     lineHeight: 20,
   },
   urlHelpList: {
     marginBottom: 16,
-    gap: 2,
+    gap: 3,
   },
   urlHelpItem: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#9CA3AF',
     lineHeight: 20,
   },
   urlInput: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
     padding: 14,
     fontSize: 14,
-    color: '#1C1C1E',
+    color: '#111827',
     minHeight: 80,
     textAlignVertical: 'top',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   urlButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   urlCancelButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: '#F2F2F7',
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
   },
   urlCancelText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600' as const,
-    color: '#6C757D',
+    color: '#6B7280',
   },
   urlSaveButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: '#0066CC',
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: '#0F172A',
     alignItems: 'center',
   },
   urlSaveButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   urlSaveText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600' as const,
     color: '#FFFFFF',
   },
