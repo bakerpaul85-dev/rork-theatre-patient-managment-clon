@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronUp, AlertCircle,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { useCloudSync, FirebaseConfig } from '@/contexts/CloudSyncContext';
 import { useForms } from '@/contexts/FormsContext';
 
@@ -17,6 +18,7 @@ const USERS_STORAGE_KEY = '@theatre_users';
 export default function ManagerPortalScreen() {
   const { isConfigured, isSyncing, lastSynced, firebaseConfig, saveConfig, clearConfig, fetchAllFormsFromCloud, fetchAllUsersFromCloud, isAdmin } = useCloudSync();
   const { forms: localForms } = useForms();
+  const router = useRouter();
 
   const [tab, setTab] = useState<'overview' | 'forms' | 'users' | 'settings'>('overview');
   const [cloudForms, setCloudForms] = useState<any[]>([]);
@@ -120,6 +122,12 @@ export default function ManagerPortalScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Open Portal Button */}
+      <TouchableOpacity style={s.portalBtn} onPress={() => router.push('/portal' as never)} activeOpacity={0.7}>
+        <BarChart2 size={16} color="#FFF" />
+        <Text style={s.portalBtnTxt}>Open Data Portal</Text>
+      </TouchableOpacity>
 
       {/* Cloud status bar */}
       <View style={s.statusBar}>
@@ -442,4 +450,6 @@ const s = StyleSheet.create({
   connectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, margin: 14, marginTop: 0, backgroundColor: '#0066CC', paddingVertical: 14, borderRadius: 12 },
   connectBtnTxt: { fontSize: 15, fontWeight: '700', color: '#FFF' },
   rulesCode: { fontFamily: 'monospace', fontSize: 12, color: '#212529', padding: 14, lineHeight: 20 },
+  portalBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 16, marginTop: 12, backgroundColor: '#0A84FF', paddingVertical: 13, borderRadius: 12 },
+  portalBtnTxt: { fontSize: 15, fontWeight: '700', color: '#FFF' },
 });
