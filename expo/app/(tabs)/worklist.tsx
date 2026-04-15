@@ -420,6 +420,9 @@ export default function WorklistScreen() {
     if (patient.referringDoctor) params.wl_referringDoctor = patient.referringDoctor;
     if (patient.doctorPracticeNumber) params.wl_doctorPracticeNumber = patient.doctorPracticeNumber;
 
+    if (patient.hospital) params.wl_hospital = patient.hospital;
+    if (patient.ward) params.wl_ward = patient.ward;
+
     if (formType === 'medical-aid') {
       if (patient.medicalAidName) params.wl_medicalAid = patient.medicalAidName;
       if (patient.medicalAidPlan) params.wl_medicalAidPlan = patient.medicalAidPlan;

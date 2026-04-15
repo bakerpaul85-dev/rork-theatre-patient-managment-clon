@@ -40,11 +40,16 @@ export interface FormData {
   dateOfBirth: string;
   contactNumber: string;
   email: string;
+  hospitalServiceProvider: string;
+  ward: string;
+  referringDoctor: string;
+  doctorPracticeNumber: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
   mainMemberIdNumber: string;
   medicalAidName: string;
+  medicalAidPlan: string;
   membershipNumber: string;
   dependantCode: string;
   nextOfKinName: string;
@@ -444,7 +449,8 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'date', 'patientTitle', 'patientFirstName', 'patientLastName', 'patientName',
         'idNumber', 'dateOfBirth', 'contactNumber', 'email',
         'mainMemberTitle', 'mainMemberFirstName', 'mainMemberLastName', 'mainMemberIdNumber',
-        'medicalAidName', 'membershipNumber', 'dependantCode',
+        'medicalAidName', 'medicalAidPlan', 'membershipNumber', 'dependantCode',
+        'hospitalServiceProvider', 'ward', 'referringDoctor', 'doctorPracticeNumber',
         'nextOfKinName', 'nextOfKinContactNumber',
         'procedure', 'icd10Code', 'screeningTimeText', 'reasonForTimeDiscrepancy',
         'timeCArmTakenIn', 'timeCArmTakenOut',

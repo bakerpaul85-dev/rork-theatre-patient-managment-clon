@@ -38,11 +38,16 @@ interface FormData {
   dateOfBirth: string;
   contactNumber: string;
   email: string;
+  hospitalServiceProvider: string;
+  ward: string;
+  referringDoctor: string;
+  doctorPracticeNumber: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
   mainMemberIdNumber: string;
   medicalAidName: string;
+  medicalAidPlan: string;
   membershipNumber: string;
   dependantCode: string;
   nextOfKinName: string;
@@ -280,7 +285,7 @@ export default function MedicalAidFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_ward?: string }>();
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
@@ -299,6 +304,19 @@ export default function MedicalAidFormScreen() {
     return `${day}${month}${year}`;
   };
 
+  const matchMedicalAidName = (input: string): string => {
+    if (!input) return '';
+    const exact = MEDICAL_AID_NAMES.find(n => n === input);
+    if (exact) return exact;
+    const lower = input.toLowerCase().trim();
+    const caseMatch = MEDICAL_AID_NAMES.find(n => n.toLowerCase() === lower);
+    if (caseMatch) return caseMatch;
+    const partialMatch = MEDICAL_AID_NAMES.find(n => n.toLowerCase().includes(lower) || lower.includes(n.toLowerCase()));
+    if (partialMatch) return partialMatch;
+    console.log('[MedicalAid] No match found for medical aid name:', input, '- using raw value');
+    return input;
+  };
+
   const getInitialFormData = (): FormData => ({
     formType: 'medical-aid',
     hospitalStickerPhoto: null,
@@ -310,11 +328,16 @@ export default function MedicalAidFormScreen() {
     dateOfBirth: '',
     contactNumber: '',
     email: '',
+    hospitalServiceProvider: '',
+    ward: '',
+    referringDoctor: '',
+    doctorPracticeNumber: '',
     mainMemberTitle: 'Mr',
     mainMemberFirstName: '',
     mainMemberLastName: '',
     mainMemberIdNumber: '',
     medicalAidName: '',
+    medicalAidPlan: '',
     membershipNumber: '',
     dependantCode: '',
     nextOfKinName: '',
@@ -369,7 +392,8 @@ export default function MedicalAidFormScreen() {
         if (params.wl_email) freshForm.email = params.wl_email;
         if (params.wl_procedure) freshForm.procedure = params.wl_procedure;
         if (params.wl_icd10) freshForm.icd10Code = params.wl_icd10;
-        if (params.wl_medicalAid) freshForm.medicalAidName = params.wl_medicalAid;
+        if (params.wl_medicalAid) freshForm.medicalAidName = matchMedicalAidName(params.wl_medicalAid);
+        if (params.wl_medicalAidPlan) freshForm.medicalAidPlan = params.wl_medicalAidPlan;
         if (params.wl_membershipNumber) freshForm.membershipNumber = params.wl_membershipNumber;
         if (params.wl_dependantCode) freshForm.dependantCode = params.wl_dependantCode;
         if (params.wl_dateOfProcedure) {
@@ -384,13 +408,17 @@ export default function MedicalAidFormScreen() {
         if (params.wl_mainMemberFirstName) freshForm.mainMemberFirstName = params.wl_mainMemberFirstName;
         if (params.wl_mainMemberLastName) freshForm.mainMemberLastName = params.wl_mainMemberLastName;
         if (params.wl_mainMemberIdNumber) freshForm.mainMemberIdNumber = params.wl_mainMemberIdNumber;
+        if (params.wl_hospital) freshForm.hospitalServiceProvider = params.wl_hospital;
+        if (params.wl_ward) freshForm.ward = params.wl_ward;
+        if (params.wl_referringDoctor) freshForm.referringDoctor = params.wl_referringDoctor;
+        if (params.wl_doctorPracticeNumber) freshForm.doctorPracticeNumber = params.wl_doctorPracticeNumber;
       }
 
       setFormData(freshForm);
       setCurrentFormId(null);
       hasUnsavedChangesRef.current = false;
     }
-  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_medicalAidPlan, params.wl_membershipNumber, params.wl_dependantCode, params.wl_dateOfProcedure, params.wl_mainMemberTitle, params.wl_mainMemberFirstName, params.wl_mainMemberLastName, params.wl_mainMemberIdNumber, params.wl_referringDoctor, params.wl_doctorPracticeNumber]);
+  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_medicalAidPlan, params.wl_membershipNumber, params.wl_dependantCode, params.wl_dateOfProcedure, params.wl_mainMemberTitle, params.wl_mainMemberFirstName, params.wl_mainMemberLastName, params.wl_mainMemberIdNumber, params.wl_referringDoctor, params.wl_doctorPracticeNumber, params.wl_hospital, params.wl_ward]);
 
   useEffect(() => {
     const hasData = Boolean(
@@ -687,9 +715,14 @@ export default function MedicalAidFormScreen() {
         `Date of Birth: ${updatedFormData.dateOfBirth}\n` +
         `Contact: ${updatedFormData.contactNumber}\n` +
         `Email: ${updatedFormData.email}\n\n` +
+        `Hospital/Service Provider: ${updatedFormData.hospitalServiceProvider}\n` +
+        `Ward/Theatre: ${updatedFormData.ward}\n` +
+        `Referring Doctor: ${updatedFormData.referringDoctor}\n` +
+        `Doctor Practice Number: ${updatedFormData.doctorPracticeNumber}\n\n` +
         `Main Member: ${updatedFormData.mainMemberTitle} ${updatedFormData.mainMemberFirstName} ${updatedFormData.mainMemberLastName}\n` +
         `Main Member ID: ${updatedFormData.mainMemberIdNumber}\n` +
         `Medical Aid: ${updatedFormData.medicalAidName}\n` +
+        `Medical Aid Plan: ${updatedFormData.medicalAidPlan}\n` +
         `Membership Number: ${updatedFormData.membershipNumber}\n` +
         `Dependant Code: ${updatedFormData.dependantCode}\n\n` +
         `Procedure: ${updatedFormData.procedure}\n` +
@@ -978,6 +1011,54 @@ export default function MedicalAidFormScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Hospital / Facility</Text>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Hospital / Service Provider *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.hospitalServiceProvider}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, hospitalServiceProvider: value }))}
+              placeholder="Enter hospital or service provider"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Ward / Theatre</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.ward}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, ward: value }))}
+              placeholder="Enter ward or theatre (optional)"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Referring Doctor</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.referringDoctor}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, referringDoctor: value }))}
+              placeholder="Enter referring doctor name (optional)"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Doctor Practice Number</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.doctorPracticeNumber}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, doctorPracticeNumber: value }))}
+              placeholder="Enter practice number (optional)"
+              editable={!isReadOnly}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Medical Aid Information</Text>
 
           <TouchableOpacity
@@ -1062,6 +1143,17 @@ export default function MedicalAidFormScreen() {
             onSelect={(value) => setFormData(prev => ({ ...prev, medicalAidName: value }))}
             disabled={isReadOnly}
           />
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Medical Aid Plan</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.medicalAidPlan}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, medicalAidPlan: value }))}
+              placeholder="Enter medical aid plan (optional)"
+              editable={!isReadOnly}
+            />
+          </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Membership Number *</Text>
