@@ -12,17 +12,19 @@ import {
 import { useForms, FormData } from '@/contexts/FormsContext';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Clock, CheckCircle, Trash2, X, ChevronDown, RefreshCw } from 'lucide-react-native';
+import { FileText, Clock, CheckCircle, Trash2, X, ChevronDown, RefreshCw, Mail } from 'lucide-react-native';
+import { resendFormEmail } from '@/utils/resendEmail';
 import { CaseStatusBadge, CaseStatusSelector } from '@/components/CaseTracker';
 import CaseTracker from '@/components/CaseTracker';
 import { CaseStatus, getCaseStatusConfig } from '@/constants/caseStatus';
 
 export default function FormsListScreen() {
-  const { getDrafts, getSubmittedForms, deleteForm, updateCaseStatus, resubmitForm } = useForms();
+  const { getDrafts, getSubmittedForms, deleteForm, updateCaseStatus, resubmitForm, getForm } = useForms();
   const { user } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'drafts' | 'submitted'>('drafts');
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
   const [statusModalForm, setStatusModalForm] = useState<FormData | null>(null);
 
   const drafts = getDrafts();
@@ -59,6 +61,19 @@ export default function FormsListScreen() {
       ]
     );
   }, [deleteForm]);
+
+  const handleResendEmail = useCallback(async (form: FormData) => {
+    setResendingEmailId(form.id);
+    try {
+      await resendFormEmail(form);
+      console.log('[Forms] Email resent for form:', form.id);
+    } catch (error) {
+      console.error('[Forms] Failed to resend email:', error);
+      Alert.alert('Error', 'Failed to open email composer. Please try again.');
+    } finally {
+      setResendingEmailId(null);
+    }
+  }, []);
 
   const handleCaseStatusChange = useCallback(async (formId: string, newStatus: CaseStatus) => {
     try {
@@ -164,34 +179,17 @@ export default function FormsListScreen() {
                 <Text style={styles.viewButtonText}>View</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.resendButton}
-                onPress={() => {
-                  const patientName = `${form.patientTitle} ${form.patientFirstName} ${form.patientLastName}`.trim() || 'Unnamed Patient';
-                  Alert.alert(
-                    'Resend Form',
-                    `This will move the form for ${patientName} back to drafts so you can edit and resubmit it.`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Resend',
-                        onPress: async () => {
-                          try {
-                            await resubmitForm(form.id);
-                            setActiveTab('drafts');
-                            Alert.alert('Success', 'Form moved to drafts. You can now edit and resubmit it.');
-                          } catch (error) {
-                            console.error('Error resubmitting form:', error);
-                            Alert.alert('Error', 'Failed to resend form. Please try again.');
-                          }
-                        },
-                      },
-                    ]
-                  );
-                }}
-                testID={`resend-btn-${form.id}`}
+                style={[styles.resendButton, resendingEmailId === form.id && styles.resendButtonDisabled]}
+                onPress={() => handleResendEmail(form)}
+                disabled={resendingEmailId === form.id}
+                testID={`resend-email-btn-${form.id}`}
               >
-                <RefreshCw size={18} color="#0066CC" />
-                <Text style={styles.resendButtonText}>Resend</Text>
+                {resendingEmailId === form.id ? (
+                  <ActivityIndicator size="small" color="#0066CC" />
+                ) : (
+                  <Mail size={18} color="#0066CC" />
+                )}
+                <Text style={styles.resendButtonText}>Resend Email</Text>
               </TouchableOpacity>
             </>
           )}
@@ -490,6 +488,9 @@ const styles = StyleSheet.create({
     color: '#0066CC',
     fontSize: 14,
     fontWeight: '600' as const,
+  },
+  resendButtonDisabled: {
+    opacity: 0.6,
   },
   deleteButton: {
     backgroundColor: '#FFF',
