@@ -16,6 +16,7 @@ import {
   cleanupOrphanedPhotos,
 } from '@/utils/photoStorage';
 import { cloudSyncBridge } from '@/utils/cloudSyncBridge';
+import { CaseStatus } from '@/constants/caseStatus';
 
 type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
 
@@ -70,6 +71,8 @@ export interface FormData {
   submissionLatitude?: number;
   submissionLongitude?: number;
   status: 'draft' | 'submitted';
+  caseStatus: CaseStatus;
+  caseStatusHistory: Array<{ status: CaseStatus; timestamp: string; updatedBy?: string }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,6 +89,7 @@ interface FormsContextValue {
   getSubmittedForms: () => FormData[];
   generateExcelExport: (form: FormData) => Promise<string>;
   sharePDF: (form: FormData) => Promise<void>;
+  updateCaseStatus: (id: string, caseStatus: CaseStatus, updatedBy?: string) => Promise<void>;
 }
 
 const FORMS_INDEX_KEY = '@patient_forms_index';
@@ -445,7 +449,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       console.warn(`Form ${form.id} data is ${(jsonString.length / 1024 / 1024).toFixed(2)}MB, stripping extra fields...`);
       const minimal: any = {};
       const safeKeys = [
-        'id', 'formType', 'status', 'createdAt', 'updatedAt', 'submittedBy',
+        'id', 'formType', 'status', 'caseStatus', 'caseStatusHistory', 'createdAt', 'updatedAt', 'submittedBy',
         'date', 'patientTitle', 'patientFirstName', 'patientLastName', 'patientName',
         'idNumber', 'dateOfBirth', 'contactNumber', 'email',
         'mainMemberTitle', 'mainMemberFirstName', 'mainMemberLastName', 'mainMemberIdNumber',
@@ -508,6 +512,8 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       ...formData,
       id: `form_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       status: 'draft',
+      caseStatus: formData.caseStatus || 'case_loaded',
+      caseStatusHistory: formData.caseStatusHistory || [{ status: 'case_loaded', timestamp: now }],
       createdAt: now,
       updatedAt: now,
     };
@@ -663,12 +669,19 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       console.error('Error deleting some photos:', deleteError);
     }
     
+    const now = new Date().toISOString();
+    const existingHistory = existingForm.caseStatusHistory || [];
+    const newCaseStatus = 'case_started';
+    const updatedHistory = [...existingHistory, { status: newCaseStatus, timestamp: now, updatedBy: username }];
+
     const minimalForm: any = {
       id: existingForm.id,
       formType: existingForm.formType,
       status: 'submitted' as const,
+      caseStatus: existingForm.caseStatus || newCaseStatus,
+      caseStatusHistory: updatedHistory,
       createdAt: existingForm.createdAt,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
       submittedBy: username || existingForm.submittedBy,
       date: existingForm.date,
       patientTitle: existingForm.patientTitle,
@@ -798,6 +811,27 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
   const generateExcelExport = useCallback(async (form: FormData): Promise<string> => {
     return generateClaimSpreadsheet(form);
   }, []);
+
+  const updateCaseStatus = useCallback(async (id: string, caseStatus: CaseStatus, updatedBy?: string) => {
+    const now = new Date().toISOString();
+    const updatedForms = forms.map(form => {
+      if (form.id !== id) return form;
+      const history = [...(form.caseStatusHistory || []), { status: caseStatus, timestamp: now, updatedBy }];
+      return { ...form, caseStatus, caseStatusHistory: history, updatedAt: now };
+    });
+    await saveForms(updatedForms);
+    console.log(`[FormsContext] Case status updated to ${caseStatus} for form ${id}`);
+
+    const updatedForm = updatedForms.find(f => f.id === id);
+    if (updatedForm) {
+      try {
+        cloudSyncBridge.triggerSync({ ...updatedForm, caseStatus, caseStatusHistory: updatedForm.caseStatusHistory });
+        console.log('[FormsContext] Cloud sync triggered for case status update');
+      } catch (syncError) {
+        console.error('[FormsContext] Cloud sync for case status failed:', syncError);
+      }
+    }
+  }, [forms, saveForms]);
 
   const sharePDF = useCallback(async (form: FormData) => {
     try {
@@ -944,5 +978,6 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     getSubmittedForms,
     generateExcelExport,
     sharePDF,
-  }), [forms, isLoading, saveDraft, updateDraft, submitForm, deleteForm, getForm, getDrafts, getSubmittedForms, generateExcelExport, sharePDF]);
+    updateCaseStatus,
+  }), [forms, isLoading, saveDraft, updateDraft, submitForm, deleteForm, getForm, getDrafts, getSubmittedForms, generateExcelExport, sharePDF, updateCaseStatus]);
 });

@@ -170,6 +170,8 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
         submittedBy: form.submittedBy ?? '',
         createdAt: form.createdAt ?? '',
         updatedAt: form.updatedAt ?? '',
+        caseStatus: anyForm.caseStatus ?? 'case_loaded',
+        caseStatusHistory: JSON.stringify(anyForm.caseStatusHistory ?? []),
         cloudSyncedAt: new Date().toISOString(),
       };
       // COIDA extra fields
