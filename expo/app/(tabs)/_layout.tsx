@@ -1,13 +1,15 @@
 import { Tabs, useRouter } from "expo-router";
-import { Home, LogOut, FolderOpen, ListChecks } from "lucide-react-native";
+import { Home, LogOut, FolderOpen, ListChecks, BarChart3 } from "lucide-react-native";
 import React from "react";
 import { TouchableOpacity, Alert } from "react-native";
 
 import Colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCloudSync } from "@/contexts/CloudSyncContext";
 
 export default function TabLayout() {
   const auth = useAuth();
+  const { isAdmin } = useCloudSync();
   const router = useRouter();
 
   if (!auth || !auth.logout) return null;
@@ -60,10 +62,18 @@ export default function TabLayout() {
           headerRight: () => <LogoutBtn />,
         }}
       />
+      <Tabs.Screen
+        name="manager"
+        options={{
+          title: "Portal",
+          tabBarIcon: ({ color }) => <BarChart3 color={color} />,
+          headerRight: () => <LogoutBtn />,
+          href: isAdmin ? "/manager" : null,
+        }}
+      />
       <Tabs.Screen name="medical-aid" options={{ href: null }} />
       <Tabs.Screen name="coida" options={{ href: null }} />
       <Tabs.Screen name="admin" options={{ href: null }} />
-      <Tabs.Screen name="manager" options={{ href: null }} />
     </Tabs>
   );
 }
