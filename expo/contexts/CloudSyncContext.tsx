@@ -2,6 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, Auth } from 'firebase/auth';
 import {
   getFirestore, Firestore, doc, setDoc, deleteDoc, getDocs,
   collection, query, orderBy,
@@ -60,6 +61,8 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const dbRef = useRef<Firestore | null>(null);
+  const authRef = useRef<Auth | null>(null);
+  const [isFirebaseAuthed, setIsFirebaseAuthed] = useState(false);
 
   const getDB = useCallback((): Firestore | null => {
     if (dbRef.current) return dbRef.current;
@@ -100,6 +103,17 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
       try {
         const app = getOrCreateApp(firebaseConfig);
         dbRef.current = getFirestore(app);
+        const auth = getAuth(app);
+        authRef.current = auth;
+        onAuthStateChanged(auth, (fbUser) => {
+          setIsFirebaseAuthed(!!fbUser);
+          if (fbUser) {
+            console.log('[CloudSync] Firebase authenticated (anonymous uid:', fbUser.uid, ')');
+          }
+        });
+        signInAnonymously(auth).catch((e: any) => {
+          console.error('[CloudSync] Anonymous sign-in failed:', e?.message ?? e);
+        });
       } catch (e: any) {
         setSyncError('Firebase init failed: ' + (e?.message ?? String(e)));
       }
@@ -124,7 +138,10 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
 
   const syncFormToCloud = useCallback(async (form: FormData): Promise<boolean> => {
     const db = getDB();
-    if (!db || !user) return false;
+    if (!db || !user || !isFirebaseAuthed) {
+      console.log('[CloudSync] syncFormToCloud skipped - db:', !!db, 'user:', !!user, 'fbAuthed:', isFirebaseAuthed);
+      return false;
+    }
     setIsSyncing(true);
     setSyncError(null);
     try {
@@ -187,7 +204,7 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
     } finally {
       setIsSyncing(false);
     }
-  }, [getDB, user]);
+  }, [getDB, user, isFirebaseAuthed]);
 
   const deleteFormFromCloud = useCallback(async (formId: string) => {
     const db = getDB();
@@ -223,7 +240,10 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
 
   const syncUserToCloud = useCallback(async (): Promise<boolean> => {
     const db = getDB();
-    if (!db || !user) return false;
+    if (!db || !user || !isFirebaseAuthed) {
+      console.log('[CloudSync] syncUserToCloud skipped - db:', !!db, 'user:', !!user, 'fbAuthed:', isFirebaseAuthed);
+      return false;
+    }
     try {
       const email = (user.email ?? '').toLowerCase();
       if (!email) return false;
@@ -242,16 +262,16 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
       console.error('[CloudSync] syncUserToCloud error:', e?.message ?? e);
       return false;
     }
-  }, [getDB, user]);
+  }, [getDB, user, isFirebaseAuthed]);
 
   const isAdmin = useMemo(() => ADMIN_EMAILS.includes(user?.email ?? ''), [user]);
 
   useEffect(() => {
-    if (user && isConfigured) {
-      console.log('[CloudSync] User detected, syncing profile to cloud');
+    if (user && isConfigured && isFirebaseAuthed) {
+      console.log('[CloudSync] User detected + Firebase authed, syncing profile to cloud');
       void syncUserToCloud();
     }
-  }, [user, isConfigured, syncUserToCloud]);
+  }, [user, isConfigured, isFirebaseAuthed, syncUserToCloud]);
 
   return useMemo(() => ({
     isConfigured, isSyncing, lastSynced, syncError, firebaseConfig,
