@@ -280,7 +280,7 @@ export default function MedicalAidFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_membershipNumber?: string; wl_dependantCode?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string }>();
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
@@ -372,13 +372,17 @@ export default function MedicalAidFormScreen() {
         if (params.wl_medicalAid) freshForm.medicalAidName = params.wl_medicalAid;
         if (params.wl_membershipNumber) freshForm.membershipNumber = params.wl_membershipNumber;
         if (params.wl_dependantCode) freshForm.dependantCode = params.wl_dependantCode;
+        if (params.wl_dateOfProcedure) {
+          const stripped = params.wl_dateOfProcedure.replace(/\//g, '');
+          if (stripped.length === 8) freshForm.date = stripped;
+        }
       }
 
       setFormData(freshForm);
       setCurrentFormId(null);
       hasUnsavedChangesRef.current = false;
     }
-  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_membershipNumber, params.wl_dependantCode]);
+  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_membershipNumber, params.wl_dependantCode, params.wl_dateOfProcedure]);
 
   useEffect(() => {
     const hasData = Boolean(
