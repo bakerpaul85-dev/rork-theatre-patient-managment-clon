@@ -432,18 +432,19 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
   }
 
   const pat = process.env.EXPO_PUBLIC_AIRTABLE_PAT;
-  console.log('[Worklist] PAT available:', !!pat, 'length:', pat?.length ?? 0);
+  console.log('[Worklist] PAT available:', !!pat, 'PAT length:', pat?.length ?? 0, 'PAT prefix:', pat?.substring(0, 6) ?? 'N/A');
   if (!pat || pat.trim().length === 0) {
-    throw new Error('Airtable Personal Access Token not configured. Please set EXPO_PUBLIC_AIRTABLE_PAT.');
+    throw new Error('Airtable Personal Access Token not configured. Please set EXPO_PUBLIC_AIRTABLE_PAT in environment variables.');
   }
 
-  console.log('[Worklist] Fetching from Airtable:', parsed.baseId, parsed.tableId, parsed.viewId);
+  const trimmedPat = pat.trim();
+  console.log('[Worklist] Fetching from Airtable - base:', parsed.baseId, 'table:', parsed.tableId, 'view:', parsed.viewId);
 
   const patients: WorklistPatient[] = [];
   let offset: string | undefined = undefined;
 
   do {
-    let apiUrl = `https://api.airtable.com/v0/${parsed.baseId}/${parsed.tableId}?pageSize=100&cellFormat=string&timeZone=Africa%2FJohannesburg&userLocale=en-za`;
+    let apiUrl = `https://api.airtable.com/v0/${parsed.baseId}/${parsed.tableId}?pageSize=100`;
     if (parsed.viewId) {
       apiUrl += `&view=${parsed.viewId}`;
     }
@@ -451,39 +452,57 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
       apiUrl += `&offset=${offset}`;
     }
 
-    console.log('[Worklist] Airtable API request:', apiUrl);
+    console.log('[Worklist] Airtable API request URL:', apiUrl);
 
-    console.log('[Worklist] Making Airtable API request...');
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${pat.trim()}`,
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${trimmedPat}`,
       },
     });
-    console.log('[Worklist] Airtable response status:', response.status);
+    console.log('[Worklist] Airtable response status:', response.status, response.statusText);
 
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorText = '';
+      try {
+        errorText = await response.text();
+      } catch (_e) {
+        errorText = 'Could not read error response body';
+      }
       console.error('[Worklist] Airtable API error:', response.status, errorText);
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Airtable authentication failed (HTTP ' + response.status + '). Check your Personal Access Token and table permissions.');
+      if (response.status === 401) {
+        throw new Error('Airtable authentication failed (401). Your Personal Access Token may have expired or been revoked. Please generate a new PAT at airtable.com/create/tokens and update EXPO_PUBLIC_AIRTABLE_PAT.');
+      }
+      if (response.status === 403) {
+        throw new Error('Airtable access denied (403). Your PAT does not have permission to access this base/table. Check scopes include data.records:read for base ' + parsed.baseId);
       }
       if (response.status === 404) {
-        throw new Error('Airtable table not found (HTTP 404). Check the URL is correct and the token has access to this base.');
+        throw new Error('Airtable table not found (404). The base, table, or view ID may have changed. Base: ' + parsed.baseId + ', Table: ' + parsed.tableId);
       }
       if (response.status === 422) {
-        throw new Error('Airtable rejected request (HTTP 422). The view or table may have changed. Details: ' + errorText.substring(0, 200));
+        throw new Error('Airtable rejected the request (422). The view or table structure may have changed. ' + errorText.substring(0, 300));
       }
-      throw new Error(`Airtable API error: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
+      if (response.status === 429) {
+        throw new Error('Airtable rate limit reached (429). Please wait a moment and try again.');
+      }
+      throw new Error(`Airtable error ${response.status}: ${errorText.substring(0, 300)}`);
     }
 
-    const data = await response.json();
-    console.log('[Worklist] Airtable returned', data.records?.length, 'records');
+    let data: any;
+    try {
+      data = await response.json();
+    } catch (jsonErr) {
+      console.error('[Worklist] Failed to parse Airtable JSON response:', jsonErr);
+      throw new Error('Airtable returned an invalid response. Please try again.');
+    }
+    console.log('[Worklist] Airtable returned', data.records?.length ?? 0, 'records, offset:', !!data.offset);
     
     if (data.records && data.records.length > 0) {
       const sampleFields = Object.keys(data.records[0].fields || {});
       console.log('[Worklist] Sample record fields:', sampleFields.join(', '));
+      console.log('[Worklist] Sample record values:', JSON.stringify(data.records[0].fields).substring(0, 300));
+    } else {
+      console.warn('[Worklist] Airtable returned 0 records for this page');
     }
 
     if (data.records && Array.isArray(data.records)) {
@@ -544,9 +563,18 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
         for (const [fieldName, fieldValue] of Object.entries(fields)) {
           if (fieldValue == null) continue;
 
-          const stringValue = Array.isArray(fieldValue)
-            ? fieldValue.map(v => typeof v === 'object' ? '' : String(v)).filter(Boolean).join(', ')
-            : (typeof fieldValue === 'object' ? '' : String(fieldValue).trim());
+          let stringValue = '';
+          if (Array.isArray(fieldValue)) {
+            stringValue = fieldValue.map(v => {
+              if (v == null) return '';
+              if (typeof v === 'object') return JSON.stringify(v);
+              return String(v);
+            }).filter(Boolean).join(', ');
+          } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+            stringValue = JSON.stringify(fieldValue);
+          } else {
+            stringValue = String(fieldValue ?? '').trim();
+          }
 
           const mappedField = normalizeAirtableFieldName(fieldName);
           if (mappedField) {

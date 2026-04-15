@@ -670,20 +670,21 @@ export default function WorklistScreen() {
     }
 
     if (worklistQuery.isError) {
+      const errMsg = worklistQuery.error instanceof Error ? worklistQuery.error.message : 'Unknown error occurred';
       return (
         <View style={styles.emptyDay}>
           <AlertCircle size={40} color="#EF4444" />
           <Text style={styles.emptyDayTitle}>Failed to Load</Text>
-          <Text style={styles.emptyDayText}>
-            {worklistQuery.error instanceof Error ? worklistQuery.error.message : 'Check that the URL is publicly accessible.'}
-          </Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => worklistQuery.refetch()}>
-            <RefreshCw size={14} color="#FFF" />
-            <Text style={styles.retryBtnText}>Retry</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.configBtn, { marginTop: 8 }]} onPress={handleOpenUrlConfig}>
-            <Text style={styles.configBtnText}>Change URL</Text>
-          </TouchableOpacity>
+          <Text style={styles.emptyDayText}>{errMsg}</Text>
+          <View style={styles.errorActions}>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => worklistQuery.refetch()}>
+              <RefreshCw size={14} color="#FFF" />
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.configBtn, { marginTop: 8 }]} onPress={handleOpenUrlConfig}>
+              <Text style={styles.configBtnText}>Change URL</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
@@ -1500,6 +1501,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600' as const,
+  },
+  errorActions: {
+    alignItems: 'center',
+    marginTop: 18,
+    gap: 4,
   },
   modalOverlay: {
     flex: 1,
