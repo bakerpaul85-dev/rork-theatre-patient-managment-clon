@@ -1,0 +1,43 @@
+export const PROCEDURE_OPTIONS = [
+  { code: '00140', name: 'X-ray fluoroscopy any region' },
+  { code: '00150', name: 'X-ray C-Arm (equipment fee only) per half hour' },
+  { code: '00155', name: 'X-ray C-arm fluoroscopy in theatre per half hour' },
+  { code: '01040', name: 'Radiographer attendance in theatre, per half hour' },
+  { code: '51110', name: 'X-ray cervical spine, one or two views' },
+  { code: '52100', name: 'X-ray thoracic spine, one or two views' },
+  { code: '53110', name: 'X-ray lumbar spine, one or two views' },
+  { code: '54100', name: 'X-ray Sacrum & Coccyx' },
+  { code: '55100', name: 'X-ray Pelvis' },
+  { code: '56100', name: 'X-ray left hip' },
+  { code: '56110', name: 'X-ray right hip' },
+  { code: '61100', name: 'X-ray left clavicle' },
+  { code: '61105', name: 'X-ray right clavicle' },
+  { code: '61130', name: 'X-ray left shoulder' },
+  { code: '61135', name: 'X-ray right shoulder' },
+  { code: '62100', name: 'X-ray left humerus' },
+  { code: '62105', name: 'X-ray right humerus' },
+  { code: '63100', name: 'X-ray left elbow' },
+  { code: '63105', name: 'X-ray right elbow' },
+  { code: '64100', name: 'X-ray left forearm' },
+  { code: '64105', name: 'X-ray right forearm' },
+  { code: '65100', name: 'X-ray left hand' },
+  { code: '65105', name: 'X-ray right hand' },
+  { code: '65130', name: 'X-ray left wrist' },
+  { code: '65135', name: 'X-ray right wrist' },
+  { code: '71100', name: 'X-ray left femur' },
+  { code: '71105', name: 'X-ray right femur' },
+  { code: '72100', name: 'X-ray left knee one or two views' },
+  { code: '72105', name: 'X-ray right knee one or two views' },
+  { code: '73100', name: 'X-ray left lower leg' },
+  { code: '73105', name: 'X-ray right lower leg' },
+  { code: '74100', name: 'X-ray left ankle' },
+  { code: '74105', name: 'X-ray right ankle' },
+  { code: '74120', name: 'X-ray left foot' },
+  { code: '74125', name: 'X-ray right foot' },
+  { code: '30150', name: 'X-ray of Ribs' },
+];
+
+export type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
+export const TITLES: Title[] = ['Mr', 'Mrs', 'Miss', 'Ms', 'Dr', 'Prof'];
+
+export const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za'];
