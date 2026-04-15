@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ImageBackground,
 } from 'react-native';
-import { FileText, ClipboardList, AlertCircle } from 'lucide-react-native';
+import { FileText, ClipboardList, AlertCircle, ListChecks } from 'lucide-react-native';
 
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +30,11 @@ export default function HomeScreen() {
   const drafts = getDrafts();
   const draftCount = drafts.length;
 
-  const handleFormPress = useCallback((formType: 'medical-aid' | 'coida') => {
+  const handleFormPress = useCallback((formType: 'medical-aid' | 'coida' | 'worklist') => {
+    if (formType === 'worklist') {
+      router.push('/(tabs)/worklist' as any);
+      return;
+    }
     const route = formType === 'coida' ? '/(tabs)/coida' : '/(tabs)/medical-aid';
     router.push(route as any);
   }, [router]);
@@ -51,6 +55,14 @@ export default function HomeScreen() {
       icon: ClipboardList,
       color: '#00A3A3',
       route: '/(tabs)/coida',
+    },
+    {
+      id: 'worklist',
+      title: 'Worklist',
+      description: 'View daily patient diary and schedule',
+      icon: ListChecks,
+      color: '#7C3AED',
+      route: '/(tabs)/worklist',
     },
   ];
 
@@ -94,7 +106,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               key={option.id}
               style={styles.card}
-              onPress={() => handleFormPress(option.id as 'medical-aid' | 'coida')}
+              onPress={() => handleFormPress(option.id as 'medical-aid' | 'coida' | 'worklist')}
               activeOpacity={0.7}
             >
               <View style={[styles.iconContainer, { backgroundColor: `${option.color}15` }]}>
