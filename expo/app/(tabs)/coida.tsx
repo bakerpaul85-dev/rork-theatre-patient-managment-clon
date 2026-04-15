@@ -133,7 +133,8 @@ export default function COIDAFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm, generateExcelExport } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_dateOfProcedure?: string; wl_coidaNumber?: string; wl_iodClaim?: string; wl_employer?: string; wl_employerContact?: string; wl_dateOfIncident?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_dateOfProcedure?: string; wl_coidaNumber?: string; wl_iodClaim?: string; wl_employer?: string; wl_employerContact?: string; wl_dateOfIncident?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_fromWorklist?: string }>();
+  const isFromWorklist = params.wl_fromWorklist === 'true';
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
@@ -383,7 +384,8 @@ export default function COIDAFormScreen() {
         if (currentFormId) {
           await updateDraft(currentFormId, formDataWithoutDicom as any);
         } else {
-          const newFormId = await saveDraft(formDataWithoutDicom as any);
+          const draftData = isFromWorklist ? { ...formDataWithoutDicom, caseStatus: 'case_started' as const } : formDataWithoutDicom;
+          const newFormId = await saveDraft(draftData as any);
           setCurrentFormId(newFormId);
         }
         
@@ -396,7 +398,7 @@ export default function COIDAFormScreen() {
     });
 
     return unsubscribe;
-  }, [navigation, currentFormId, formData, isReadOnly, saveDraft, updateDraft]);
+  }, [navigation, currentFormId, formData, isReadOnly, isFromWorklist, saveDraft, updateDraft]);
 
   const parseSouthAfricanID = (idNumber: string): string => {
     if (idNumber.length !== 13) return '';
@@ -755,7 +757,8 @@ export default function COIDAFormScreen() {
         await updateDraft(currentFormId, formDataWithoutDicom as any);
         Alert.alert('Success', 'Draft saved successfully!');
       } else {
-        const newFormId = await saveDraft(formDataWithoutDicom as any);
+        const draftData = isFromWorklist ? { ...formDataWithoutDicom, caseStatus: 'case_started' as const } : formDataWithoutDicom;
+        const newFormId = await saveDraft(draftData as any);
         setCurrentFormId(newFormId);
         Alert.alert('Success', 'Draft saved successfully!');
       }

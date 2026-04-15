@@ -285,7 +285,8 @@ export default function MedicalAidFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_ward?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_ward?: string; wl_fromWorklist?: string }>();
+  const isFromWorklist = params.wl_fromWorklist === 'true';
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
@@ -452,7 +453,8 @@ export default function MedicalAidFormScreen() {
         if (currentFormId) {
           await updateDraft(currentFormId, formData);
         } else {
-          const newFormId = await saveDraft(formData);
+          const draftData = isFromWorklist ? { ...formData, caseStatus: 'case_started' as const } : formData;
+          const newFormId = await saveDraft(draftData as any);
           setCurrentFormId(newFormId);
         }
         
@@ -465,7 +467,7 @@ export default function MedicalAidFormScreen() {
     });
 
     return unsubscribe;
-  }, [navigation, currentFormId, formData, isReadOnly, saveDraft, updateDraft]);
+  }, [navigation, currentFormId, formData, isReadOnly, isFromWorklist, saveDraft, updateDraft]);
 
   const parseSouthAfricanID = (idNumber: string): string => {
     if (idNumber.length !== 13) return '';
@@ -658,7 +660,8 @@ export default function MedicalAidFormScreen() {
         await updateDraft(currentFormId, formData);
         Alert.alert('Success', 'Draft saved successfully!');
       } else {
-        const newFormId = await saveDraft(formData);
+        const draftData = isFromWorklist ? { ...formData, caseStatus: 'case_started' as const } : formData;
+        const newFormId = await saveDraft(draftData as any);
         setCurrentFormId(newFormId);
         Alert.alert('Success', 'Draft saved successfully!');
       }

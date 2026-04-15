@@ -428,6 +428,7 @@ export default function WorklistScreen() {
       if (patient.medicalAidPlan) params.wl_medicalAidPlan = patient.medicalAidPlan;
       if (patient.membershipNumber) params.wl_membershipNumber = patient.membershipNumber;
       if (patient.dependantCode) params.wl_dependantCode = patient.dependantCode;
+      params.wl_fromWorklist = 'true';
       router.push({ pathname: '/(tabs)/medical-aid', params } as any);
     } else {
       if (patient.coidaNumber) params.wl_coidaNumber = patient.coidaNumber;
@@ -435,6 +436,7 @@ export default function WorklistScreen() {
       if (patient.employerName) params.wl_employer = patient.employerName;
       if (patient.employerContact) params.wl_employerContact = patient.employerContact;
       if (patient.dateOfIncident) params.wl_dateOfIncident = patient.dateOfIncident;
+      params.wl_fromWorklist = 'true';
       router.push({ pathname: '/(tabs)/coida', params } as any);
     }
   }, [router]);

@@ -508,12 +508,13 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
 
   const saveDraft = useCallback(async (formData: Omit<FormData, 'id' | 'status' | 'createdAt' | 'updatedAt'>): Promise<string> => {
     const now = new Date().toISOString();
+    const initialStatus: CaseStatus = formData.caseStatus || 'case_loaded';
     const newForm: FormData = {
       ...formData,
       id: `form_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       status: 'draft',
-      caseStatus: formData.caseStatus || 'case_loaded',
-      caseStatusHistory: formData.caseStatusHistory || [{ status: 'case_loaded', timestamp: now }],
+      caseStatus: initialStatus,
+      caseStatusHistory: formData.caseStatusHistory || [{ status: initialStatus, timestamp: now }],
       createdAt: now,
       updatedAt: now,
     };
@@ -671,14 +672,14 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     
     const now = new Date().toISOString();
     const existingHistory = existingForm.caseStatusHistory || [];
-    const newCaseStatus = 'case_started';
+    const newCaseStatus: CaseStatus = 'complete_info';
     const updatedHistory = [...existingHistory, { status: newCaseStatus, timestamp: now, updatedBy: username }];
 
     const minimalForm: any = {
       id: existingForm.id,
       formType: existingForm.formType,
       status: 'submitted' as const,
-      caseStatus: existingForm.caseStatus || newCaseStatus,
+      caseStatus: newCaseStatus,
       caseStatusHistory: updatedHistory,
       createdAt: existingForm.createdAt,
       updatedAt: now,
