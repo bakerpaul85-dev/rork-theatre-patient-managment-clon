@@ -1,6 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ADMIN_EMAILS } from '@/contexts/CloudSyncContext';
 
 interface User {
   username: string;
@@ -27,13 +28,44 @@ interface AuthContextValue {
 const USERS_STORAGE_KEY = '@theatre_users';
 const SESSION_STORAGE_KEY = '@theatre_session';
 
+const ADMIN_ACCOUNTS: StoredUser[] = [
+  { username: 'ADMIN_PAUL', password: 'Admin@2024', name: 'Paul (Admin)', email: 'paul@btstech.co.za' },
+  { username: 'ADMIN_ALLAN', password: 'Admin@2024', name: 'Allan (Admin)', email: 'allan@medimarketing100.co.za' },
+];
+
 export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const adminSeeded = useRef(false);
+
+  const seedAdminAccounts = useCallback(async () => {
+    if (adminSeeded.current) return;
+    adminSeeded.current = true;
+    try {
+      const usersJson = await AsyncStorage.getItem(USERS_STORAGE_KEY);
+      const users: StoredUser[] = usersJson ? JSON.parse(usersJson) : [];
+      let changed = false;
+      for (const admin of ADMIN_ACCOUNTS) {
+        const exists = users.find(u => (u.email ?? '').toLowerCase() === admin.email.toLowerCase());
+        if (!exists) {
+          console.log('[Auth] Seeding admin account:', admin.email);
+          users.push(admin);
+          changed = true;
+        }
+      }
+      if (changed) {
+        await AsyncStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+        console.log('[Auth] Admin accounts seeded successfully');
+      }
+    } catch (e) {
+      console.error('[Auth] Error seeding admin accounts:', e);
+    }
+  }, []);
 
   useEffect(() => {
     const loadSession = async () => {
       try {
+        await seedAdminAccounts();
         console.log('[Session] Loading saved session');
         const sessionJson = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
         if (sessionJson) {
@@ -62,7 +94,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() =>
     };
     
     void loadSession();
-  }, []);
+  }, [seedAdminAccounts]);
 
   const signUp = useCallback(async (username: string, password: string, name: string, email: string): Promise<boolean> => {
     try {
