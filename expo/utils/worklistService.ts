@@ -441,7 +441,7 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
   let offset: string | undefined = undefined;
 
   do {
-    let apiUrl = `https://api.airtable.com/v0/${parsed.baseId}/${parsed.tableId}?pageSize=100`;
+    let apiUrl = `https://api.airtable.com/v0/${parsed.baseId}/${parsed.tableId}?pageSize=100&cellFormat=string`;
     if (parsed.viewId) {
       apiUrl += `&view=${parsed.viewId}`;
     }
