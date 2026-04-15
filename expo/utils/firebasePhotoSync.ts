@@ -1,5 +1,5 @@
 import { FirebaseApp } from 'firebase/app';
-import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { readPhoto } from './photoStorage';
 
 const ALL_PHOTO_TYPES = [
@@ -80,7 +80,11 @@ export async function uploadFormPhotosToFirebase(
           const storageRef = ref(storage, storagePath);
 
           console.log(`[FirebasePhotoSync] Uploading ${task.photoType} (${(cleanBase64.length / 1024).toFixed(0)}KB)...`);
-          await uploadString(storageRef, cleanBase64, 'base64', {
+
+          const dataUri = `data:image/jpeg;base64,${cleanBase64}`;
+          const response = await fetch(dataUri);
+          const blob = await response.blob();
+          await uploadBytes(storageRef, blob, {
             contentType: 'image/jpeg',
           });
 
