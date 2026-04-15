@@ -12,6 +12,15 @@ import { FormData } from './FormsContext';
 const FIREBASE_CONFIG_KEY = '@firebase_config';
 export const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za'];
 
+const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
+  apiKey: 'AIzaSyCgllczOlYOAJq0VVO-KrG3Uk--DO929Uk',
+  authDomain: 'theatre-18690.firebaseapp.com',
+  projectId: 'theatre-18690',
+  storageBucket: 'theatre-18690.firebasestorage.app',
+  messagingSenderId: '751356683754',
+  appId: '1:751356683754:web:0d3bb15634eafbc1ddfe93',
+};
+
 export interface FirebaseConfig {
   apiKey: string;
   authDomain: string;
@@ -71,9 +80,18 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
           const cfg = JSON.parse(raw) as FirebaseConfig;
           setFirebaseConfig(cfg);
           setIsConfigured(true);
+          console.log('[CloudSync] Loaded Firebase config from storage');
+          return;
         } catch {}
       }
-    }).catch(() => {});
+      console.log('[CloudSync] Using default Firebase config');
+      setFirebaseConfig(DEFAULT_FIREBASE_CONFIG);
+      setIsConfigured(true);
+    }).catch(() => {
+      console.log('[CloudSync] Storage error, using default Firebase config');
+      setFirebaseConfig(DEFAULT_FIREBASE_CONFIG);
+      setIsConfigured(true);
+    });
   }, []);
 
   useEffect(() => {
