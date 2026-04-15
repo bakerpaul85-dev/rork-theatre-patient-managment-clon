@@ -1037,6 +1037,7 @@ export default function WorklistScreen() {
               Enter the URL of your worklist spreadsheet. Supports:
             </Text>
             <View style={styles.urlHelpList}>
+              <Text style={styles.urlHelpItem}>• Airtable (table URL with PAT configured)</Text>
               <Text style={styles.urlHelpItem}>• OneDrive Excel (sharing link)</Text>
               <Text style={styles.urlHelpItem}>• Google Sheets (share link or published URL)</Text>
               <Text style={styles.urlHelpItem}>• Any direct URL to .xlsx or .csv file</Text>
@@ -1046,7 +1047,7 @@ export default function WorklistScreen() {
               style={styles.urlInput}
               value={urlInput}
               onChangeText={setUrlInput}
-              placeholder="https://1drv.ms/x/... or Google Sheets URL"
+              placeholder="https://airtable.com/appXXX/tblXXX/viwXXX"
               placeholderTextColor="#9CA3AF"
               autoCapitalize="none"
               autoCorrect={false}

@@ -334,8 +334,160 @@ const convertGoogleSheetsUrl = (url: string): string => {
   return url;
 };
 
+const parseAirtableUrl = (url: string): { baseId: string; tableId: string; viewId?: string } | null => {
+  const match = url.match(/airtable\.com\/(app[a-zA-Z0-9]+)\/(tbl[a-zA-Z0-9]+)(?:\/(viw[a-zA-Z0-9]+))?/);
+  if (match) {
+    return {
+      baseId: match[1],
+      tableId: match[2],
+      viewId: match[3] || undefined,
+    };
+  }
+  return null;
+};
+
+const normalizeAirtableFieldName = (fieldName: string): keyof WorklistPatient | null => {
+  const normalized = normalizeHeader(fieldName);
+  return COLUMN_MAP[normalized] || null;
+};
+
+const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> => {
+  const parsed = parseAirtableUrl(url);
+  if (!parsed) {
+    throw new Error('Invalid Airtable URL. Expected format: https://airtable.com/appXXX/tblXXX/viwXXX');
+  }
+
+  const pat = process.env.EXPO_PUBLIC_AIRTABLE_PAT;
+  if (!pat) {
+    throw new Error('Airtable Personal Access Token not configured. Please set EXPO_PUBLIC_AIRTABLE_PAT.');
+  }
+
+  console.log('[Worklist] Fetching from Airtable:', parsed.baseId, parsed.tableId, parsed.viewId);
+
+  const patients: WorklistPatient[] = [];
+  let offset: string | undefined = undefined;
+
+  do {
+    let apiUrl = `https://api.airtable.com/v0/${parsed.baseId}/${parsed.tableId}?pageSize=100`;
+    if (parsed.viewId) {
+      apiUrl += `&view=${parsed.viewId}`;
+    }
+    if (offset) {
+      apiUrl += `&offset=${offset}`;
+    }
+
+    console.log('[Worklist] Airtable API request:', apiUrl);
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${pat}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Worklist] Airtable API error:', response.status, errorText);
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Airtable authentication failed. Check your Personal Access Token and table permissions.');
+      }
+      if (response.status === 404) {
+        throw new Error('Airtable table not found. Check the URL is correct and the token has access to this base.');
+      }
+      throw new Error(`Airtable API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('[Worklist] Airtable returned', data.records?.length, 'records');
+
+    if (data.records && Array.isArray(data.records)) {
+      for (let i = 0; i < data.records.length; i++) {
+        const record = data.records[i];
+        const fields = record.fields || {};
+
+        const rawData: Record<string, string> = {};
+        for (const [key, value] of Object.entries(fields)) {
+          rawData[key] = String(value ?? '');
+        }
+
+        const patient: Partial<WorklistPatient> = {
+          id: `airtable_${record.id || i}_${Date.now()}`,
+          patientFirstName: '',
+          patientLastName: '',
+          patientTitle: '',
+          idNumber: '',
+          dateOfBirth: '',
+          contactNumber: '',
+          email: '',
+          medicalAidName: '',
+          membershipNumber: '',
+          dependantCode: '',
+          procedure: '',
+          icd10Code: '',
+          coidaNumber: '',
+          iodClaimNumber: '',
+          employerName: '',
+          employerContact: '',
+          dateOfIncident: '',
+          referringDoctor: '',
+          ward: '',
+          hospital: '',
+          dateOfProcedure: '',
+          formType: 'unknown',
+          rawData,
+        };
+
+        for (const [fieldName, fieldValue] of Object.entries(fields)) {
+          if (fieldValue == null) continue;
+          const mappedField = normalizeAirtableFieldName(fieldName);
+          if (mappedField) {
+            if (mappedField === 'formType') {
+              const val = String(fieldValue).toLowerCase().trim();
+              if (val.includes('coida') || val.includes('compensation') || val.includes('iod')) {
+                patient.formType = 'coida';
+              } else if (val.includes('medical') || val.includes('med aid')) {
+                patient.formType = 'medical-aid';
+              }
+            } else {
+              (patient as any)[mappedField] = String(fieldValue).trim();
+            }
+          }
+        }
+
+        if (patient.patientFirstName && !patient.patientLastName) {
+          const { firstName, lastName } = splitFullName(patient.patientFirstName);
+          patient.patientFirstName = firstName;
+          patient.patientLastName = lastName;
+        }
+
+        if (patient.formType === 'unknown') {
+          patient.formType = determineFormType(patient);
+        }
+
+        const hasData = patient.patientFirstName || patient.patientLastName || patient.idNumber;
+        if (hasData) {
+          patients.push(patient as WorklistPatient);
+        }
+      }
+    }
+
+    offset = data.offset;
+  } while (offset);
+
+  console.log(`[Worklist] Total Airtable patients fetched: ${patients.length}`);
+  return patients;
+};
+
+export const isAirtableUrl = (url: string): boolean => {
+  return url.includes('airtable.com/');
+};
+
 export const fetchWorklist = async (url: string): Promise<WorklistPatient[]> => {
   console.log('[Worklist] Fetching worklist from:', url);
+
+  if (isAirtableUrl(url)) {
+    return fetchAirtableWorklist(url);
+  }
 
   let fetchUrl = url;
 
