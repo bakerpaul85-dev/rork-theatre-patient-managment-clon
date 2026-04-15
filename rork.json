@@ -1,7 +1,13 @@
 {
+  "$schema": "https://rork.com/schema/rork.json",
   "apps": [
     {
       "name": "Expo",
+      "path": "expo",
+      "framework": "react-native"
+    },
+    {
+      "name": "Theatre Patient Management",
       "path": "expo",
       "framework": "react-native"
     }

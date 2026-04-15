@@ -1,114 +1,86 @@
 import { Tabs, useRouter } from "expo-router";
-import { Home, LogOut, FolderOpen, Shield, ListChecks } from "lucide-react-native";
+import { Home, LogOut, FolderOpen, Shield, ListChecks, BarChart2 } from "lucide-react-native";
 import React from "react";
 import { TouchableOpacity, Alert } from "react-native";
 
-import { Colors } from "@/constants/colors";
+import Colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
-import { ADMIN_EMAILS } from "@/constants/procedures";
+
+const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za'];
 
 export default function TabLayout() {
   const auth = useAuth();
   const router = useRouter();
 
-  if (!auth || !auth.logout) {
-    return null;
-  }
+  if (!auth || !auth.logout) return null;
 
   const { logout, user } = auth;
   const isAdmin = ADMIN_EMAILS.includes(user?.email ?? '');
 
   const handleLogout = () => {
-    Alert.alert(
-      'Sign out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign out',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/login' as never);
-          },
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/login' as never);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const LogoutBtn = () => (
     <TouchableOpacity onPress={handleLogout} style={{ marginRight: 16 }}>
-      <LogOut size={22} color={Colors.primary} />
+      <LogOut size={24} color={Colors.light.tint} />
     </TouchableOpacity>
   );
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textTertiary,
-        headerShown: true,
-        tabBarStyle: {
-          borderTopWidth: 0.5,
-          borderTopColor: Colors.border,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        headerStyle: {
-          elevation: 0,
-          shadowOpacity: 0,
-          borderBottomWidth: 0.5,
-          borderBottomColor: Colors.border,
-        } as any,
-        headerTitleStyle: {
-          fontWeight: '700' as const,
-          color: Colors.text,
-          fontSize: 17,
-        },
-        headerRight: () => <LogoutBtn />,
-      }}
-    >
+    <Tabs screenOptions={{ tabBarActiveTintColor: Colors.light.tint, headerShown: true }}>
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) => <Home size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="worklist"
-        options={{
-          title: "Worklist",
-          tabBarIcon: ({ color }) => <ListChecks size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Home color={color} />,
+          headerRight: () => <LogoutBtn />,
         }}
       />
       <Tabs.Screen
         name="forms"
         options={{
           title: "My Forms",
-          tabBarIcon: ({ color }) => <FolderOpen size={22} color={color} />,
+          tabBarIcon: ({ color }) => <FolderOpen color={color} />,
+          headerRight: () => <LogoutBtn />,
         }}
       />
       <Tabs.Screen
-        name="medical-aid"
+        name="worklist"
         options={{
-          href: null,
-          title: "Medical Aid Form",
+          title: "Worklist",
+          tabBarIcon: ({ color }) => <ListChecks color={color} />,
+          headerRight: () => <LogoutBtn />,
         }}
       />
-      <Tabs.Screen
-        name="coida"
-        options={{
-          href: null,
-          title: "COIDA Form",
-        }}
-      />
+      <Tabs.Screen name="medical-aid" options={{ href: null }} />
+      <Tabs.Screen name="coida" options={{ href: null }} />
       <Tabs.Screen
         name="admin"
         options={{
-          title: "Portal",
-          tabBarIcon: ({ color }) => <Shield size={22} color={color} />,
+          title: "Admin",
+          tabBarIcon: ({ color }) => <Shield color={color} />,
           href: isAdmin ? undefined : null,
+          headerRight: () => <LogoutBtn />,
+        }}
+      />
+      <Tabs.Screen
+        name="manager"
+        options={{
+          title: "Portal",
+          tabBarIcon: ({ color }) => <BarChart2 color={color} />,
+          href: isAdmin ? undefined : null,
+          headerRight: () => <LogoutBtn />,
         }}
       />
     </Tabs>

@@ -8,12 +8,22 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { FormsProvider } from "@/contexts/FormsContext";
+import { CloudSyncProvider, useCloudSync } from "@/contexts/CloudSyncContext";
+import { cloudSyncBridge } from "@/utils/cloudSyncBridge";
 
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+function CloudSyncBridgeWirer() {
+  const { syncFormToCloud, deleteFormFromCloud, isConfigured } = useCloudSync();
+  useEffect(() => {
+    if (!isConfigured) return;
+    cloudSyncBridge.onSync((form) => { void syncFormToCloud(form); });
+    cloudSyncBridge.onDelete((formId) => { void deleteFormFromCloud(formId); });
+  }, [isConfigured, syncFormToCloud, deleteFormFromCloud]);
+  return null;
+}
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
@@ -22,9 +32,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (isLoading) return;
-
     const inAuthGroup = segments[0] === '(tabs)';
-
     if (!user && inAuthGroup) {
       router.replace('/login' as never);
     } else if (user && !inAuthGroup) {
@@ -51,9 +59,12 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <FormsProvider>
-            <GestureHandlerRootView style={styles.container}>
-              <RootLayoutNav />
-            </GestureHandlerRootView>
+            <CloudSyncProvider>
+              <CloudSyncBridgeWirer />
+              <GestureHandlerRootView style={styles.container}>
+                <RootLayoutNav />
+              </GestureHandlerRootView>
+            </CloudSyncProvider>
           </FormsProvider>
         </AuthProvider>
       </QueryClientProvider>
@@ -62,7 +73,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
 });
