@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from "expo-router";
-import { Home, LogOut, FolderOpen, ListChecks, BarChart3 } from "lucide-react-native";
+import { Home, LogOut, FolderOpen, ListChecks, BarChart3, HeartPulse, ShieldCheck } from "lucide-react-native";
 import React from "react";
 import { TouchableOpacity, Alert } from "react-native";
 
@@ -71,8 +71,22 @@ export default function TabLayout() {
           href: isAdmin ? "/manager" : null,
         }}
       />
-      <Tabs.Screen name="medical-aid" options={{ href: null }} />
-      <Tabs.Screen name="coida" options={{ href: null }} />
+      <Tabs.Screen
+        name="medical-aid"
+        options={{
+          title: "Medical Aid",
+          tabBarIcon: ({ color }) => <HeartPulse color={color} />,
+          headerRight: () => <LogoutBtn />,
+        }}
+      />
+      <Tabs.Screen
+        name="coida"
+        options={{
+          title: "COIDA",
+          tabBarIcon: ({ color }) => <ShieldCheck color={color} />,
+          headerRight: () => <LogoutBtn />,
+        }}
+      />
       <Tabs.Screen name="admin" options={{ href: null }} />
     </Tabs>
   );
