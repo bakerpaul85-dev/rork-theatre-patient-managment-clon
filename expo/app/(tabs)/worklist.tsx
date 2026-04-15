@@ -149,15 +149,24 @@ export default function WorklistScreen() {
       if (isGlobalStorageAvailable()) {
         try {
           const globalUrl = await getGlobalWorklistUrl();
-          if (globalUrl) {
-            console.log('[Worklist] Using global URL from DB');
+          if (globalUrl && globalUrl.includes('airtable.com')) {
+            console.log('[Worklist] Using global Airtable URL from DB');
             return globalUrl;
+          }
+          if (globalUrl && !globalUrl.includes('airtable.com')) {
+            console.log('[Worklist] Stale non-Airtable URL in DB, overriding with default Airtable URL');
+            await saveGlobalWorklistUrl(DEFAULT_AIRTABLE_URL);
           }
         } catch (e) {
           console.warn('[Worklist] Global DB fetch failed, falling back to local:', e);
         }
       }
       const saved = await AsyncStorage.getItem(WORKLIST_URL_KEY);
+      if (saved && !saved.includes('airtable.com')) {
+        console.log('[Worklist] Stale non-Airtable URL in local storage, clearing');
+        await AsyncStorage.removeItem(WORKLIST_URL_KEY);
+        return DEFAULT_AIRTABLE_URL;
+      }
       return saved || DEFAULT_AIRTABLE_URL;
     },
   });
@@ -623,7 +632,7 @@ export default function WorklistScreen() {
           <Settings size={40} color="#D1D5DB" />
           <Text style={styles.emptyDayTitle}>No Spreadsheet Configured</Text>
           <Text style={styles.emptyDayText}>
-            Connect your OneDrive or Google Sheet to see your daily patient diary.
+            Connect your Airtable to see your daily patient diary.
           </Text>
           <TouchableOpacity style={styles.configBtn} onPress={handleOpenUrlConfig}>
             <Text style={styles.configBtnText}>Configure Spreadsheet</Text>
