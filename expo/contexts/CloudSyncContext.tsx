@@ -39,6 +39,7 @@ interface CloudSyncContextValue {
   saveConfig: (config: FirebaseConfig) => Promise<void>;
   clearConfig: () => Promise<void>;
   syncFormToCloud: (form: FormData) => Promise<boolean>;
+  syncUserToCloud: () => Promise<boolean>;
   deleteFormFromCloud: (formId: string) => Promise<void>;
   fetchAllFormsFromCloud: () => Promise<FormData[]>;
   fetchAllUsersFromCloud: () => Promise<any[]>;
@@ -220,15 +221,45 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
     }
   }, [getDB]);
 
+  const syncUserToCloud = useCallback(async (): Promise<boolean> => {
+    const db = getDB();
+    if (!db || !user) return false;
+    try {
+      const email = (user.email ?? '').toLowerCase();
+      if (!email) return false;
+      const userId = email.replace(/[^a-zA-Z0-9]/g, '_');
+      const userData: Record<string, any> = {
+        name: user.name ?? '',
+        email,
+        uid: email,
+        role: ADMIN_EMAILS.includes(email) ? 'admin' : 'user',
+        lastLoginAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, 'users', userId), userData, { merge: true });
+      console.log('[CloudSync] User synced to cloud:', email);
+      return true;
+    } catch (e: any) {
+      console.error('[CloudSync] syncUserToCloud error:', e?.message ?? e);
+      return false;
+    }
+  }, [getDB, user]);
+
   const isAdmin = useMemo(() => ADMIN_EMAILS.includes(user?.email ?? ''), [user]);
+
+  useEffect(() => {
+    if (user && isConfigured) {
+      console.log('[CloudSync] User detected, syncing profile to cloud');
+      void syncUserToCloud();
+    }
+  }, [user, isConfigured, syncUserToCloud]);
 
   return useMemo(() => ({
     isConfigured, isSyncing, lastSynced, syncError, firebaseConfig,
-    saveConfig, clearConfig, syncFormToCloud, deleteFormFromCloud,
+    saveConfig, clearConfig, syncFormToCloud, syncUserToCloud, deleteFormFromCloud,
     fetchAllFormsFromCloud, fetchAllUsersFromCloud, isAdmin,
   }), [
     isConfigured, isSyncing, lastSynced, syncError, firebaseConfig,
-    saveConfig, clearConfig, syncFormToCloud, deleteFormFromCloud,
+    saveConfig, clearConfig, syncFormToCloud, syncUserToCloud, deleteFormFromCloud,
     fetchAllFormsFromCloud, fetchAllUsersFromCloud, isAdmin,
   ]);
 });
