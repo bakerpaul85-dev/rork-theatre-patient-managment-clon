@@ -755,6 +755,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         ...formWithPhotos,
         ...formData,
         id,
+        formType: existingForm.formType,
         status: 'submitted',
         submittedBy: username || existingForm.submittedBy,
         updatedAt: new Date().toISOString(),
@@ -763,6 +764,10 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         hospitalStickerPhoto: null,
         timeInTheatrePhoto: null,
         timeOutTheatrePhoto: null,
+        cArmImagesCount: existingForm.cArmImagesCount ?? 0,
+        employerReportPhotosCount: existingForm.employerReportPhotosCount ?? 0,
+        attachmentPhotosCount: existingForm.attachmentPhotosCount ?? 0,
+        referralLetterPagesCount: existingForm.referralLetterPagesCount ?? 0,
       };
       delete cloudFormData.dicomFiles;
       delete cloudFormData.cArmImages;
