@@ -332,7 +332,7 @@ export const cleanupOrphanedPhotos = async (validFormIds: string[]): Promise<num
           if (cursor) {
             const key = cursor.key as string;
             const parts = key.split('_');
-            const formId = parts.length >= 2 ? `${parts[0]}_${parts[1]}` : '';
+            const formId = parts.length >= 3 ? `${parts[0]}_${parts[1]}_${parts[2]}` : '';
             
             if (!validIdSet.has(formId)) {
               cursor.delete();
@@ -360,7 +360,7 @@ export const cleanupOrphanedPhotos = async (validFormIds: string[]): Promise<num
       
       for (const file of files) {
         const parts = file.replace('.jpg', '').split('_');
-        const formId = parts.length >= 2 ? `${parts[0]}_${parts[1]}` : '';
+        const formId = parts.length >= 3 ? `${parts[0]}_${parts[1]}_${parts[2]}` : '';
         
         if (!validIdSet.has(formId)) {
           await FileSystem.deleteAsync(`${PHOTOS_DIR}${file}`, { idempotent: true });
