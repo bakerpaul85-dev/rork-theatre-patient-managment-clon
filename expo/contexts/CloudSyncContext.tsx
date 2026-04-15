@@ -9,7 +9,6 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { FormData } from './FormsContext';
-import { uploadFormPhotosToFirebase } from '@/utils/firebasePhotoSync';
 
 const FIREBASE_CONFIG_KEY = '@firebase_config';
 export const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za'];
@@ -186,31 +185,7 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
         if (anyForm[f] != null && anyForm[f] !== '') cloudForm[f] = anyForm[f];
       }
       await setDoc(doc(db, 'forms', form.id), cloudForm, { merge: true });
-      console.log('[CloudSync] Form metadata synced, now uploading photos...');
-
-      try {
-        const app = getOrCreateApp(firebaseConfig!);
-        const photoUrls = await uploadFormPhotosToFirebase(app, form.id, form.formType, {
-          cArmImagesCount: anyForm.cArmImagesCount ?? 0,
-          employerReportPhotosCount: anyForm.employerReportPhotosCount ?? 0,
-          attachmentPhotosCount: anyForm.attachmentPhotosCount ?? 0,
-          referralLetterPagesCount: anyForm.referralLetterPagesCount ?? 0,
-        });
-
-        if (Object.keys(photoUrls).length > 0) {
-          await setDoc(doc(db, 'forms', form.id), {
-            ...photoUrls,
-            photosSyncedAt: new Date().toISOString(),
-            photoCount: Object.keys(photoUrls).length,
-          }, { merge: true });
-          console.log(`[CloudSync] ${Object.keys(photoUrls).length} photo URLs saved to Firestore`);
-        } else {
-          console.log('[CloudSync] No photos found locally to upload');
-        }
-      } catch (photoError: any) {
-        console.error('[CloudSync] Photo upload failed (form data still synced):', photoError?.message ?? photoError);
-      }
-
+      console.log('[CloudSync] Form metadata synced to cloud');
       setLastSynced(new Date().toISOString());
       return true;
     } catch (e: any) {
