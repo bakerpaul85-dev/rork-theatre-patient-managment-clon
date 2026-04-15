@@ -53,6 +53,7 @@ import {
 
 const WORKLIST_URL_KEY = '@worklist_spreadsheet_url';
 const MANUAL_ENTRIES_KEY = '@worklist_manual_entries';
+const DEFAULT_AIRTABLE_URL = 'https://airtable.com/appSowzeF74zHsf6y/tblH5vCdGTVlY2tqt/viwVGGMsqLmvR2hEc';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ManualEntryForm {
@@ -157,11 +158,11 @@ export default function WorklistScreen() {
         }
       }
       const saved = await AsyncStorage.getItem(WORKLIST_URL_KEY);
-      return saved || process.env.EXPO_PUBLIC_GOOGLE_SHEET_URL || '';
+      return saved || DEFAULT_AIRTABLE_URL;
     },
   });
 
-  const spreadsheetUrl = savedUrlQuery.data || '';
+  const spreadsheetUrl = savedUrlQuery.data || DEFAULT_AIRTABLE_URL;
 
   const manualEntriesQuery = useQuery({
     queryKey: ['manual-entries'],
