@@ -15,6 +15,7 @@ import {
   getStorageStats,
   cleanupOrphanedPhotos,
 } from '@/utils/photoStorage';
+import { cloudSyncBridge } from '@/utils/cloudSyncBridge';
 
 type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
 
@@ -701,6 +702,31 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     setForms(updatedFormsWithPhotos.filter(Boolean) as FormData[]);
     
     console.log('Form saved successfully with submitted status');
+    
+    console.log('[FormsContext] Triggering cloud sync for submitted form:', id);
+    try {
+      const cloudFormData: Record<string, any> = {
+        ...formWithPhotos,
+        ...formData,
+        id,
+        status: 'submitted',
+        submittedBy: username || existingForm.submittedBy,
+        updatedAt: new Date().toISOString(),
+        submissionLatitude: location?.latitude,
+        submissionLongitude: location?.longitude,
+        hospitalStickerPhoto: null,
+        timeInTheatrePhoto: null,
+        timeOutTheatrePhoto: null,
+      };
+      delete cloudFormData.dicomFiles;
+      delete cloudFormData.cArmImages;
+      delete cloudFormData.employerReportPhotos;
+      delete cloudFormData.attachmentPhotos;
+      cloudSyncBridge.triggerSync(cloudFormData);
+      console.log('[FormsContext] Cloud sync triggered successfully');
+    } catch (syncError) {
+      console.error('[FormsContext] Cloud sync trigger failed (form still saved locally):', syncError);
+    }
   }, [saveFormToStorage, loadFormWithPhotos]);
 
   const deleteForm = useCallback(async (id: string) => {
