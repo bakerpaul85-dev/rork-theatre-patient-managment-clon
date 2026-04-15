@@ -243,10 +243,23 @@ export default function WorklistScreen() {
 
   const worklistQuery = useQuery({
     queryKey: ['worklist', spreadsheetUrl],
-    queryFn: () => fetchWorklist(spreadsheetUrl),
+    queryFn: async () => {
+      console.log('[Worklist] Starting fetch with URL:', spreadsheetUrl?.substring(0, 60));
+      try {
+        const result = await fetchWorklist(spreadsheetUrl);
+        console.log('[Worklist] Fetch succeeded, got', result.length, 'patients');
+        return result;
+      } catch (err: any) {
+        console.error('[Worklist] Fetch failed:', err?.message ?? err);
+        throw err;
+      }
+    },
     enabled: !!spreadsheetUrl,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
+    staleTime: 2 * 60 * 1000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const saveUrlMutation = useMutation({

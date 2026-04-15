@@ -427,11 +427,13 @@ const normalizeAirtableFieldName = (fieldName: string): keyof WorklistPatient | 
 const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> => {
   const parsed = parseAirtableUrl(url);
   if (!parsed) {
+    console.error('[Worklist] Failed to parse Airtable URL:', url);
     throw new Error('Invalid Airtable URL. Expected format: https://airtable.com/appXXX/tblXXX/viwXXX');
   }
 
   const pat = process.env.EXPO_PUBLIC_AIRTABLE_PAT;
-  if (!pat) {
+  console.log('[Worklist] PAT available:', !!pat, 'length:', pat?.length ?? 0);
+  if (!pat || pat.trim().length === 0) {
     throw new Error('Airtable Personal Access Token not configured. Please set EXPO_PUBLIC_AIRTABLE_PAT.');
   }
 
@@ -451,27 +453,38 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
 
     console.log('[Worklist] Airtable API request:', apiUrl);
 
+    console.log('[Worklist] Making Airtable API request...');
     const response = await fetch(apiUrl, {
+      method: 'GET',
       headers: {
-        'Authorization': `Bearer ${pat}`,
+        'Authorization': `Bearer ${pat.trim()}`,
         'Content-Type': 'application/json',
       },
     });
+    console.log('[Worklist] Airtable response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[Worklist] Airtable API error:', response.status, errorText);
       if (response.status === 401 || response.status === 403) {
-        throw new Error('Airtable authentication failed. Check your Personal Access Token and table permissions.');
+        throw new Error('Airtable authentication failed (HTTP ' + response.status + '). Check your Personal Access Token and table permissions.');
       }
       if (response.status === 404) {
-        throw new Error('Airtable table not found. Check the URL is correct and the token has access to this base.');
+        throw new Error('Airtable table not found (HTTP 404). Check the URL is correct and the token has access to this base.');
       }
-      throw new Error(`Airtable API error: ${response.status} ${response.statusText}`);
+      if (response.status === 422) {
+        throw new Error('Airtable rejected request (HTTP 422). The view or table may have changed. Details: ' + errorText.substring(0, 200));
+      }
+      throw new Error(`Airtable API error: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
     console.log('[Worklist] Airtable returned', data.records?.length, 'records');
+    
+    if (data.records && data.records.length > 0) {
+      const sampleFields = Object.keys(data.records[0].fields || {});
+      console.log('[Worklist] Sample record fields:', sampleFields.join(', '));
+    }
 
     if (data.records && Array.isArray(data.records)) {
       for (let i = 0; i < data.records.length; i++) {
@@ -526,6 +539,8 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
           rawData,
         };
 
+        let mappedCount = 0;
+        let unmappedFields: string[] = [];
         for (const [fieldName, fieldValue] of Object.entries(fields)) {
           if (fieldValue == null) continue;
 
@@ -535,6 +550,7 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
 
           const mappedField = normalizeAirtableFieldName(fieldName);
           if (mappedField) {
+            mappedCount++;
             if (mappedField === 'formType') {
               const val = stringValue.toLowerCase();
               if (val.includes('coida') || val.includes('compensation') || val.includes('iod') || val.includes('wca')) {
@@ -560,7 +576,13 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
             } else {
               (patient as any)[mappedField] = stringValue;
             }
+          } else {
+            unmappedFields.push(fieldName);
           }
+        }
+        if (i === 0) {
+          console.log('[Worklist] First record: mapped', mappedCount, 'fields, unmapped:', unmappedFields.join(', '));
+          console.log('[Worklist] First record patient name:', patient.patientFirstName, patient.patientLastName);
         }
 
         if (patient.patientFirstName && !patient.patientLastName) {
