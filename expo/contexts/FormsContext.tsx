@@ -109,13 +109,14 @@ const sanitizeFormForStorage = (form: any): any => {
       cleaned[field] = null;
     }
   }
-  const arrayPhotoFields = ['cArmImages', 'employerReportPhotos', 'attachmentPhotos'];
+  const arrayPhotoFields = ['cArmImages', 'employerReportPhotos', 'attachmentPhotos', 'referralLetterPages'];
   for (const field of arrayPhotoFields) {
     if (Array.isArray(cleaned[field])) {
       cleaned[field] = [];
     }
   }
   delete cleaned.dicomFiles;
+  delete cleaned.referralLetterPDF;
   return cleaned;
 };
 
@@ -285,6 +286,19 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
 
       const referralLetterPhoto = await readPhoto(form.id, 'referralLetter');
       if (referralLetterPhoto) loadedForm.referralLetterPhoto = referralLetterPhoto;
+
+      const referralLetterPages: Array<{ uri: string; metadata?: any }> = [];
+      const referralPageCount = form.referralLetterPagesCount || 0;
+      for (let i = 0; i < referralPageCount; i++) {
+        const photo = await readPhoto(form.id, `referralPage_${i}`);
+        if (photo) {
+          const metadata = form[`referralPageMetadata_${i}`];
+          referralLetterPages.push({ uri: photo, metadata });
+        }
+      }
+      if (referralLetterPages.length > 0) {
+        loadedForm.referralLetterPages = referralLetterPages;
+      }
     }
 
     return loadedForm;
@@ -413,6 +427,21 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         strippedForm.attachmentPhotos = [];
       }
 
+      if (form.referralLetterPages && Array.isArray(form.referralLetterPages)) {
+        const validPages = form.referralLetterPages.filter((img: any) => {
+          if (!img.uri || typeof img.uri !== 'string') return false;
+          const cleanUri = img.uri.replace(/^data:[^;]+;base64,/, '');
+          return cleanUri && cleanUri.length > 100;
+        });
+        strippedForm.referralLetterPagesCount = validPages.length;
+        validPages.forEach((img: any, i: number) => {
+          photoSavePromises.push(writePhotoToFile(form.id, `referralPage_${i}`, img.uri));
+          if (img.metadata) strippedForm[`referralPageMetadata_${i}`] = img.metadata;
+        });
+        strippedForm.referralLetterPages = [];
+      }
+      delete strippedForm.referralLetterPDF;
+
       if (form.timeInTheatreClockPhoto) {
         photoSavePromises.push(writePhotoToFile(form.id, 'timeInClock', form.timeInTheatreClockPhoto));
         strippedForm.timeInTheatreClockPhoto = null;
@@ -463,8 +492,15 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'cArmImagesCount', 'employerReportPhotosCount', 'attachmentPhotosCount',
         'hospitalStickerPhotoMetadata', 'timeInTheatrePhotoMetadata', 'timeOutTheatrePhotoMetadata',
         'employerName', 'employerContactNumber', 'employerAddress',
+        'employerContact', 'dateOfIncident',
         'dateOfInjury', 'timeOfInjury', 'placeOfAccident', 'causeOfInjury',
         'natureOfInjury', 'bodyPartInjured', 'wCompNumber',
+        'dateOfProcedure', 'timeInTheatre', 'fluoroscopyTime', 'timeOutTheatre',
+        'coidaMemberNumber', 'patientIodClaimNumber',
+        'referralLetterPagesCount', 'proceduresList',
+        'hospitalStickerPhotoMetadata', 'timeInTheatreClockPhotoMetadata',
+        'screeningTimePhotoMetadata', 'timeOutTheatreClockPhotoMetadata',
+        'firstMedicalReportPhotoMetadata', 'patientIdPhotoMetadata',
       ];
       for (const key of safeKeys) {
         if (cleaned[key] !== undefined) minimal[key] = cleaned[key];
@@ -643,6 +679,19 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
 
       const referralLetterPhoto = await readPhoto(id, 'referralLetter');
       if (referralLetterPhoto) formWithPhotos.referralLetterPhoto = referralLetterPhoto;
+
+      const referralLetterPages: Array<{ uri: string; metadata?: any }> = [];
+      const referralPageCount = (existingForm as any).referralLetterPagesCount || 0;
+      for (let i = 0; i < referralPageCount; i++) {
+        const photo = await readPhoto(id, `referralPage_${i}`);
+        if (photo) {
+          const metadata = (existingForm as any)[`referralPageMetadata_${i}`];
+          referralLetterPages.push({ uri: photo, metadata });
+        }
+      }
+      if (referralLetterPages.length > 0) {
+        formWithPhotos.referralLetterPages = referralLetterPages;
+      }
     }
     
     console.log('=== FORM SUBMISSION: SAVING FORM ===');
@@ -661,6 +710,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       deletePromises.push(deletePhotoFile(id, `cArm_${i}`));
       deletePromises.push(deletePhotoFile(id, `employer_${i}`));
       deletePromises.push(deletePhotoFile(id, `attachment_${i}`));
+      deletePromises.push(deletePhotoFile(id, `referralPage_${i}`));
     }
     
     try {
@@ -742,6 +792,8 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       delete cloudFormData.cArmImages;
       delete cloudFormData.employerReportPhotos;
       delete cloudFormData.attachmentPhotos;
+      delete cloudFormData.referralLetterPages;
+      delete cloudFormData.referralLetterPDF;
       cloudSyncBridge.triggerSync(cloudFormData);
       console.log('[FormsContext] Cloud sync triggered successfully');
     } catch (syncError) {
@@ -783,6 +835,11 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         deletePhotoFile(id, 'patientId'),
         deletePhotoFile(id, 'referralLetter')
       );
+
+      const referralPageCount = (formToDelete as any).referralLetterPagesCount || 0;
+      for (let i = 0; i < referralPageCount; i++) {
+        deletePromises.push(deletePhotoFile(id, `referralPage_${i}`));
+      }
     }
 
     await Promise.all(deletePromises);
