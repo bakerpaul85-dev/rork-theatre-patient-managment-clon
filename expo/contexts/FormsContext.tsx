@@ -697,65 +697,40 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     
     console.log('=== FORM SUBMISSION: SAVING FORM ===');
     
-    console.log('Deleting photos to free storage...');
-    const photoTypes = [
-      'hospital', 'timeIn', 'timeOut', 'timeInClock', 'timeOutClock',
-      'screening', 'firstMedical', 'patientId', 'referralLetter'
-    ];
-    
-    const deletePromises: Promise<void>[] = [];
-    for (const photoType of photoTypes) {
-      deletePromises.push(deletePhotoFile(id, photoType));
-    }
-    for (let i = 0; i < 100; i++) {
-      deletePromises.push(deletePhotoFile(id, `cArm_${i}`));
-      deletePromises.push(deletePhotoFile(id, `employer_${i}`));
-      deletePromises.push(deletePhotoFile(id, `attachment_${i}`));
-      deletePromises.push(deletePhotoFile(id, `referralPage_${i}`));
-    }
-    
-    try {
-      await Promise.all(deletePromises);
-      console.log('Photos deleted successfully for submitted form');
-    } catch (deleteError) {
-      console.error('Error deleting some photos:', deleteError);
-    }
+    console.log('Keeping photos in storage for potential resend...');
     
     const now = new Date().toISOString();
     const existingHistory = existingForm.caseStatusHistory || [];
     const newCaseStatus: CaseStatus = 'complete_info';
     const updatedHistory = [...existingHistory, { status: newCaseStatus, timestamp: now, updatedBy: username }];
 
-    const minimalForm: any = {
-      id: existingForm.id,
-      formType: existingForm.formType,
+    const submittedForm: any = {
+      ...existingForm,
+      ...formData,
       status: 'submitted' as const,
       caseStatus: newCaseStatus,
       caseStatusHistory: updatedHistory,
-      createdAt: existingForm.createdAt,
       updatedAt: now,
       submittedBy: username || existingForm.submittedBy,
-      date: existingForm.date,
-      patientTitle: existingForm.patientTitle,
-      patientFirstName: existingForm.patientFirstName || '',
-      patientLastName: existingForm.patientLastName || '',
-      idNumber: existingForm.idNumber,
-      procedure: existingForm.procedure,
-      radiographerName: existingForm.radiographerName,
       submissionLatitude: location?.latitude,
       submissionLongitude: location?.longitude,
       hospitalStickerPhoto: null,
       timeInTheatrePhoto: null,
       timeOutTheatrePhoto: null,
-      cArmImagesCount: 0,
-      employerReportPhotosCount: 0,
-      attachmentPhotosCount: 0,
     };
+    delete submittedForm.dicomFiles;
+    delete submittedForm.referralLetterPDF;
+    const photoArrayFields = ['cArmImages', 'employerReportPhotos', 'attachmentPhotos', 'referralLetterPages'];
+    for (const field of photoArrayFields) {
+      if (Array.isArray(submittedForm[field])) {
+        submittedForm[field] = [];
+      }
+    }
     
     console.log('Saving submitted form with status: submitted');
     
     try {
-      await saveFormToStorage(minimalForm);
+      await saveFormToStorage(submittedForm);
     } catch (saveError: any) {
       console.error('Error saving form status:', saveError);
       throw saveError;
@@ -873,11 +848,18 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
 
   const resubmitForm = useCallback(async (id: string) => {
     const now = new Date().toISOString();
+
+    const existingFormData = await AsyncStorage.getItem(`${FORM_KEY_PREFIX}${id}`);
+    const storedForm = existingFormData ? JSON.parse(existingFormData) : null;
+
+    const formWithPhotos = storedForm ? await loadFormWithPhotos(storedForm) : null;
+
     const updatedForms = forms.map(form => {
       if (form.id !== id) return form;
       const history = [...(form.caseStatusHistory || []), { status: 'case_started' as CaseStatus, timestamp: now, updatedBy: 'Resend' }];
+      const base = formWithPhotos || form;
       return {
-        ...form,
+        ...base,
         status: 'draft' as const,
         caseStatus: 'case_started' as CaseStatus,
         caseStatusHistory: history,
@@ -885,8 +867,8 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       };
     });
     await saveForms(updatedForms);
-    console.log(`[FormsContext] Form ${id} moved back to draft for resubmission`);
-  }, [forms, saveForms]);
+    console.log(`[FormsContext] Form ${id} moved back to draft for resubmission with photos restored`);
+  }, [forms, saveForms, loadFormWithPhotos]);
 
   const updateCaseStatus = useCallback(async (id: string, caseStatus: CaseStatus, updatedBy?: string) => {
     const now = new Date().toISOString();
