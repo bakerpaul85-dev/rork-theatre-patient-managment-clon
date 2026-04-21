@@ -22,6 +22,9 @@ import { MEDICAL_AID_NAMES } from '@/constants/medicalAids';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
+import { syncFormToAirtable, buildMedicalAidAirtablePayload } from '@/utils/airtableSync';
+import { parseAirtableUrl } from '@/utils/worklistService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
@@ -709,15 +712,12 @@ export default function MedicalAidFormScreen() {
       }
 
       try {
-        const { syncFormToAirtable, buildMedicalAidAirtablePayload } = await import('@/utils/airtableSync');
-        const { parseAirtableUrl } = await import('@/utils/worklistService');
         const anyForm = formData as any;
         let baseId = anyForm.airtableBaseId || params.wl_atBaseId;
         let tableId = anyForm.airtableTableId || params.wl_atTableId;
         const recordId = anyForm.airtableRecordId || params.wl_atRecordId;
         if (!baseId || !tableId) {
           try {
-            const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
             const savedUrl = await AsyncStorage.getItem('@worklist_spreadsheet_url');
             const defaultUrl = 'https://airtable.com/appSowzeF74zHsf6y/tblH5vCdGTVlY2tqt/viwVGGMsqLmvR2hEc';
             const parsed = parseAirtableUrl(savedUrl || defaultUrl);
