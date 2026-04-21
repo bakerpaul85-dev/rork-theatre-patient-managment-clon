@@ -472,6 +472,8 @@ export default function COIDAFormScreen() {
       const photo = await cameraRef.takePictureAsync({ 
         base64: true,
         quality: quality,
+        exif: false,
+        skipProcessing: false,
       });
       console.log('Picture taken successfully with quality:', quality);
       
@@ -479,8 +481,36 @@ export default function COIDAFormScreen() {
         throw new Error('Failed to capture photo data');
       }
       
-      const photoUri = `data:image/jpeg;base64,${photo.base64}`;
+      let photoUri = `data:image/jpeg;base64,${photo.base64}`;
       console.log('Photo URI created, length:', photoUri.length);
+
+      try {
+        const photoWidth = (photo as any).width ?? 0;
+        const photoHeight = (photo as any).height ?? 0;
+        console.log('Photo dimensions:', photoWidth, 'x', photoHeight);
+        if (photoWidth > 0 && photoHeight > 0 && photoWidth > photoHeight) {
+          console.log('Photo is landscape, rotating to portrait');
+          const rotated = await ImageManipulator.manipulateAsync(
+            photoUri,
+            [{ rotate: -90 }],
+            { compress: quality, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          if (rotated.base64) {
+            photoUri = `data:image/jpeg;base64,${rotated.base64}`;
+          }
+        } else {
+          const normalized = await ImageManipulator.manipulateAsync(
+            photoUri,
+            [],
+            { compress: quality, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          if (normalized.base64) {
+            photoUri = `data:image/jpeg;base64,${normalized.base64}`;
+          }
+        }
+      } catch (rotErr) {
+        console.log('Orientation normalization failed, using original:', rotErr);
+      }
       
       setShowCamera(false);
       setCameraMode(null);
