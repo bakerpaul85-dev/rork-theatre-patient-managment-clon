@@ -1212,10 +1212,11 @@ export default function COIDAFormScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Date of Birth</Text>
             <TextInput
-              style={[styles.input, styles.inputDisabled]}
+              style={styles.input}
               value={formData.dateOfBirth}
-              editable={false}
-              placeholder="Auto-populated from ID"
+              onChangeText={(value) => setFormData(prev => ({ ...prev, dateOfBirth: value }))}
+              placeholder="DD/MM/YYYY (auto-filled for SA ID)"
+              editable={!isReadOnly}
             />
           </View>
 
