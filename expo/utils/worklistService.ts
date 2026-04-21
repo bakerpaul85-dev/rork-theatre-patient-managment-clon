@@ -41,6 +41,9 @@ export interface WorklistPatient {
   radiographerComments: string;
   formType: 'medical-aid' | 'coida' | 'unknown';
   rawData: Record<string, string>;
+  airtableRecordId?: string;
+  airtableBaseId?: string;
+  airtableTableId?: string;
 }
 
 const COLUMN_MAP: Record<string, keyof WorklistPatient> = {
@@ -407,7 +410,7 @@ const convertGoogleSheetsUrl = (url: string): string => {
   return url;
 };
 
-const parseAirtableUrl = (url: string): { baseId: string; tableId: string; viewId?: string } | null => {
+export const parseAirtableUrl = (url: string): { baseId: string; tableId: string; viewId?: string } | null => {
   const match = url.match(/airtable\.com\/(app[a-zA-Z0-9]+)\/(tbl[a-zA-Z0-9]+)(?:\/(viw[a-zA-Z0-9]+))?/);
   if (match) {
     return {
@@ -516,6 +519,9 @@ const fetchAirtableWorklist = async (url: string): Promise<WorklistPatient[]> =>
         }
 
         const patient: Partial<WorklistPatient> = {
+          airtableRecordId: record.id,
+          airtableBaseId: parsed.baseId,
+          airtableTableId: parsed.tableId,
           id: `airtable_${record.id || i}_${Date.now()}`,
           patientFirstName: '',
           patientLastName: '',

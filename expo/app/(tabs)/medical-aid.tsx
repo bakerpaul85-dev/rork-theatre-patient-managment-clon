@@ -285,7 +285,7 @@ export default function MedicalAidFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_ward?: string; wl_fromWorklist?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_ward?: string; wl_fromWorklist?: string; wl_atRecordId?: string; wl_atBaseId?: string; wl_atTableId?: string }>();
   const isFromWorklist = params.wl_fromWorklist === 'true';
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -413,6 +413,9 @@ export default function MedicalAidFormScreen() {
         if (params.wl_ward) freshForm.ward = params.wl_ward;
         if (params.wl_referringDoctor) freshForm.referringDoctor = params.wl_referringDoctor;
         if (params.wl_doctorPracticeNumber) freshForm.doctorPracticeNumber = params.wl_doctorPracticeNumber;
+        if (params.wl_atRecordId) (freshForm as any).airtableRecordId = params.wl_atRecordId;
+        if (params.wl_atBaseId) (freshForm as any).airtableBaseId = params.wl_atBaseId;
+        if (params.wl_atTableId) (freshForm as any).airtableTableId = params.wl_atTableId;
       }
 
       setFormData(freshForm);
@@ -703,6 +706,31 @@ export default function MedicalAidFormScreen() {
         console.log('Draft saved with ID:', newFormId, 'Now submitting...');
         await new Promise(resolve => setTimeout(resolve, 500));
         await submitForm(newFormId, updatedFormData, user?.username);
+      }
+
+      try {
+        const { syncFormToAirtable, buildMedicalAidAirtablePayload } = await import('@/utils/airtableSync');
+        const { parseAirtableUrl } = await import('@/utils/worklistService');
+        const anyForm = formData as any;
+        let baseId = anyForm.airtableBaseId || params.wl_atBaseId;
+        let tableId = anyForm.airtableTableId || params.wl_atTableId;
+        const recordId = anyForm.airtableRecordId || params.wl_atRecordId;
+        if (!baseId || !tableId) {
+          try {
+            const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+            const savedUrl = await AsyncStorage.getItem('@worklist_spreadsheet_url');
+            const defaultUrl = 'https://airtable.com/appSowzeF74zHsf6y/tblH5vCdGTVlY2tqt/viwVGGMsqLmvR2hEc';
+            const parsed = parseAirtableUrl(savedUrl || defaultUrl);
+            if (parsed) { baseId = baseId || parsed.baseId; tableId = tableId || parsed.tableId; }
+          } catch (e) { console.warn('[MedicalAid] Could not resolve Airtable target:', e); }
+        }
+        if (baseId && tableId) {
+          const payload = buildMedicalAidAirtablePayload(updatedFormData, { submittedBy: user?.username, timestamp });
+          const result = await syncFormToAirtable({ baseId, tableId, recordId }, payload);
+          console.log('[MedicalAid] Airtable sync result:', result);
+        }
+      } catch (atErr) {
+        console.error('[MedicalAid] Airtable sync failed (form still submitted):', atErr);
       }
 
       setFormData(getInitialFormData());

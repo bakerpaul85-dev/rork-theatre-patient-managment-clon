@@ -71,6 +71,9 @@ export interface FormData {
   submissionLatitude?: number;
   submissionLongitude?: number;
   status: 'draft' | 'submitted';
+  airtableRecordId?: string;
+  airtableBaseId?: string;
+  airtableTableId?: string;
   caseStatus: CaseStatus;
   caseStatusHistory: Array<{ status: CaseStatus; timestamp: string; updatedBy?: string }>;
   createdAt: string;
@@ -492,6 +495,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'submissionLatitude', 'submissionLongitude',
         'cArmImagesCount', 'employerReportPhotosCount', 'attachmentPhotosCount',
         'hospitalStickerPhotoMetadata', 'timeInTheatrePhotoMetadata', 'timeOutTheatrePhotoMetadata',
+        'airtableRecordId', 'airtableBaseId', 'airtableTableId',
         'employerName', 'employerContactNumber', 'employerAddress',
         'employerContact', 'dateOfIncident',
         'dateOfInjury', 'timeOfInjury', 'placeOfAccident', 'causeOfInjury',

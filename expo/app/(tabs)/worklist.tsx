@@ -435,6 +435,9 @@ export default function WorklistScreen() {
 
     if (patient.hospital) params.wl_hospital = patient.hospital;
     if (patient.ward) params.wl_ward = patient.ward;
+    if (patient.airtableRecordId) params.wl_atRecordId = patient.airtableRecordId;
+    if (patient.airtableBaseId) params.wl_atBaseId = patient.airtableBaseId;
+    if (patient.airtableTableId) params.wl_atTableId = patient.airtableTableId;
 
     if (formType === 'medical-aid') {
       if (patient.medicalAidName) params.wl_medicalAid = patient.medicalAidName;
