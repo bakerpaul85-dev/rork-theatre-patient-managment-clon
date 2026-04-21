@@ -23,8 +23,6 @@ import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { generateClaimSpreadsheet } from '@/utils/excelGenerator';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import DocumentScanner from '@/components/DocumentScanner';
-import { syncFormToAirtable, buildCoidaAirtablePayload } from '@/utils/airtableSync';
-import { parseAirtableUrl } from '@/utils/worklistService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
@@ -842,28 +840,6 @@ export default function COIDAFormScreen() {
         console.log('Draft saved with ID:', newFormId, 'Now submitting...');
         await new Promise(resolve => setTimeout(resolve, 500));
         await submitForm(newFormId, formDataWithoutDicom as any, user?.username);
-      }
-
-      try {
-        const anyForm = formData as any;
-        let baseId = anyForm.airtableBaseId || params.wl_atBaseId;
-        let tableId = anyForm.airtableTableId || params.wl_atTableId;
-        const recordId = anyForm.airtableRecordId || params.wl_atRecordId;
-        if (!baseId || !tableId) {
-          try {
-            const savedUrl = await AsyncStorage.getItem('@worklist_spreadsheet_url');
-            const defaultUrl = 'https://airtable.com/appSowzeF74zHsf6y/tblH5vCdGTVlY2tqt/viwVGGMsqLmvR2hEc';
-            const parsed = parseAirtableUrl(savedUrl || defaultUrl);
-            if (parsed) { baseId = baseId || parsed.baseId; tableId = tableId || parsed.tableId; }
-          } catch (e) { console.warn('[COIDA] Could not resolve Airtable target:', e); }
-        }
-        if (baseId && tableId) {
-          const payload = buildCoidaAirtablePayload(updatedFormData, { submittedBy: user?.username, timestamp });
-          const result = await syncFormToAirtable({ baseId, tableId, recordId }, payload);
-          console.log('[COIDA] Airtable sync result:', result);
-        }
-      } catch (atErr) {
-        console.error('[COIDA] Airtable sync failed (form still submitted):', atErr);
       }
 
       setFormData(getInitialFormData());
