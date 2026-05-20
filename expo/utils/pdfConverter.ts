@@ -177,10 +177,20 @@ async function convertImagesToPDFMobile(
   filename: string;
 }> {
   try {
-    console.log(`Starting mobile PDF conversion for ${images.length} page(s)...`);
+    const MAX_PAGES = 20;
+    const MAX_HTML_SIZE_MB = 15;
+    const MAX_HTML_SIZE = MAX_HTML_SIZE_MB * 1024 * 1024;
+
+    const pagesToConvert = images.slice(0, MAX_PAGES);
+    if (images.length > MAX_PAGES) {
+      console.warn(`PDF conversion limited to ${MAX_PAGES} pages (had ${images.length})`);
+    }
+
+    console.log(`Starting mobile PDF conversion for ${pagesToConvert.length} page(s)...`);
 
     const base64DataUris: string[] = [];
-    for (let i = 0; i < images.length; i++) {
+    let totalBase64Size = 0;
+    for (let i = 0; i < pagesToConvert.length; i++) {
       const img = images[i];
       const imageData = typeof img === 'string' ? img : img.base64;
       let dataUri = imageData;
@@ -203,7 +213,8 @@ async function convertImagesToPDFMobile(
       }
 
       base64DataUris.push(dataUri);
-      console.log(`Prepared image ${i + 1}/${images.length} for PDF (${(dataUri.length / 1024).toFixed(0)}KB)`);
+      totalBase64Size += dataUri.length;
+      console.log(`Prepared image ${i + 1}/${pagesToConvert.length} for PDF (${(dataUri.length / 1024).toFixed(0)}KB)`);
     }
 
     if (base64DataUris.length === 0) {
@@ -251,6 +262,9 @@ async function convertImagesToPDFMobile(
     `;
     
     console.log('HTML prepared, total length:', (html.length / 1024).toFixed(0), 'KB');
+    if (html.length > MAX_HTML_SIZE) {
+      throw new Error(`PDF HTML exceeds ${MAX_HTML_SIZE_MB}MB limit - too many/large images`);
+    }
     const { uri } = await Print.printToFileAsync({ html });
     console.log('PDF created at:', uri);
     

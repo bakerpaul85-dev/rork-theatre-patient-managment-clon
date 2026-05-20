@@ -762,15 +762,36 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     }
     
     const allFormIds = formIds.includes(id) ? formIds : [...formIds, id];
-    const updatedFormsWithPhotos = await Promise.all(
-      allFormIds.map(async (fId: string) => {
-        const fData = await AsyncStorage.getItem(`${FORM_KEY_PREFIX}${fId}`);
-        if (!fData) return null;
-        const form = JSON.parse(fData);
-        return loadFormWithPhotos(form);
-      })
-    );
-    setForms(updatedFormsWithPhotos.filter(Boolean) as FormData[]);
+    await updateFormIndex(allFormIds);
+
+    const updatedForms = forms.map(form => {
+      if (form.id !== id) return form;
+      return {
+        ...form,
+        ...formData,
+        status: 'submitted' as const,
+        caseStatus: newCaseStatus,
+        caseStatusHistory: updatedHistory,
+        updatedAt: now,
+        submittedBy: username || existingForm.submittedBy,
+        submissionLatitude: location?.latitude,
+        submissionLongitude: location?.longitude,
+        hospitalStickerPhoto: null,
+        timeInTheatrePhoto: null,
+        timeOutTheatrePhoto: null,
+        timeInTheatreClockPhoto: null,
+        timeOutTheatreClockPhoto: null,
+        screeningTimePhoto: null,
+        firstMedicalReportPhoto: null,
+        patientIdPhoto: null,
+        referralLetterPhoto: null,
+        cArmImages: [],
+        employerReportPhotos: [],
+        attachmentPhotos: [],
+        referralLetterPages: [],
+      } as FormData;
+    });
+    setForms(updatedForms);
     
     console.log('Form saved successfully with submitted status');
     

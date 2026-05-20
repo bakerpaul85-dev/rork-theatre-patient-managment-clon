@@ -762,27 +762,45 @@ export default function MedicalAidFormScreen() {
             await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
           } catch {}
 
-          const saveBase64ToFile = async (base64Uri: string, filename: string): Promise<string> => {
-            const base64Data = base64Uri.replace(/^data:[^;]+;base64,/, '');
-            const filePath = `${tempDir}${filename}`;
-            await FileSystem.writeAsStringAsync(filePath, base64Data, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            console.log('Saved attachment file:', filePath);
-            return filePath;
+          const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
+          let totalAttachmentSize = 0;
+
+          const saveBase64ToFile = async (base64Uri: string, filename: string): Promise<string | null> => {
+            try {
+              const base64Data = base64Uri.replace(/^data:[^;]+;base64,/, '');
+              const sizeEstimate = Math.ceil(base64Data.length * 0.75);
+              if (sizeEstimate > MAX_ATTACHMENT_SIZE) {
+                console.warn(`Skipping attachment ${filename}: exceeds ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB`);
+                return null;
+              }
+              if (totalAttachmentSize + sizeEstimate > 15 * 1024 * 1024) {
+                console.warn(`Skipping attachment ${filename}: total would exceed 15MB`);
+                return null;
+              }
+              const filePath = `${tempDir}${filename}`;
+              await FileSystem.writeAsStringAsync(filePath, base64Data, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              totalAttachmentSize += sizeEstimate;
+              console.log('Saved attachment file:', filePath, `(${(sizeEstimate / 1024).toFixed(0)}KB)`);
+              return filePath;
+            } catch (err) {
+              console.error('Failed to save attachment:', filename, err);
+              return null;
+            }
           };
 
           if (updatedFormData.hospitalStickerPhoto) {
             const path = await saveBase64ToFile(updatedFormData.hospitalStickerPhoto, 'hospital_sticker.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.timeInTheatrePhoto) {
             const path = await saveBase64ToFile(updatedFormData.timeInTheatrePhoto, 'clock_in_theatre.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.timeOutTheatrePhoto) {
             const path = await saveBase64ToFile(updatedFormData.timeOutTheatrePhoto, 'clock_out_theatre.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
 
           try {

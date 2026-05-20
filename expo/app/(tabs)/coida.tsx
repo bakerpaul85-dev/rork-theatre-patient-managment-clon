@@ -929,46 +929,64 @@ export default function COIDAFormScreen() {
             await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
           } catch {}
 
-          const saveBase64ToFile = async (base64Uri: string, filename: string): Promise<string> => {
-            const base64Data = base64Uri.replace(/^data:[^;]+;base64,/, '');
-            const filePath = `${tempDir}${filename}`;
-            await FileSystem.writeAsStringAsync(filePath, base64Data, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            console.log('Saved attachment file:', filePath);
-            return filePath;
+          const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
+          let totalAttachmentSize = 0;
+
+          const saveBase64ToFile = async (base64Uri: string, filename: string): Promise<string | null> => {
+            try {
+              const base64Data = base64Uri.replace(/^data:[^;]+;base64,/, '');
+              const sizeEstimate = Math.ceil(base64Data.length * 0.75);
+              if (sizeEstimate > MAX_ATTACHMENT_SIZE) {
+                console.warn(`Skipping attachment ${filename}: exceeds ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB`);
+                return null;
+              }
+              if (totalAttachmentSize + sizeEstimate > 15 * 1024 * 1024) {
+                console.warn(`Skipping attachment ${filename}: total would exceed 15MB`);
+                return null;
+              }
+              const filePath = `${tempDir}${filename}`;
+              await FileSystem.writeAsStringAsync(filePath, base64Data, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              totalAttachmentSize += sizeEstimate;
+              console.log('Saved attachment file:', filePath, `(${(sizeEstimate / 1024).toFixed(0)}KB)`);
+              return filePath;
+            } catch (err) {
+              console.error('Failed to save attachment:', filename, err);
+              return null;
+            }
           };
 
           if (updatedFormData.hospitalStickerPhoto) {
             const path = await saveBase64ToFile(updatedFormData.hospitalStickerPhoto, 'hospital_sticker.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.timeInTheatreClockPhoto) {
             const path = await saveBase64ToFile(updatedFormData.timeInTheatreClockPhoto, 'time_in_theatre_clock.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.screeningTimePhoto) {
             const path = await saveBase64ToFile(updatedFormData.screeningTimePhoto, 'screening_time.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.timeOutTheatreClockPhoto) {
             const path = await saveBase64ToFile(updatedFormData.timeOutTheatreClockPhoto, 'time_out_theatre_clock.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.firstMedicalReportPhoto) {
             const path = await saveBase64ToFile(updatedFormData.firstMedicalReportPhoto, 'first_medical_report.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.patientIdPhoto) {
             const path = await saveBase64ToFile(updatedFormData.patientIdPhoto, 'patient_id.jpg');
-            attachments.push(path);
+            if (path) attachments.push(path);
           }
           if (updatedFormData.cArmImages?.length) {
             for (let i = 0; i < updatedFormData.cArmImages.length; i++) {
               const img = updatedFormData.cArmImages[i];
               if (img.uri) {
                 const path = await saveBase64ToFile(img.uri, `c_arm_image_${i + 1}.jpg`);
-                attachments.push(path);
+                if (path) attachments.push(path);
               }
             }
           }
@@ -977,25 +995,32 @@ export default function COIDAFormScreen() {
               const img = updatedFormData.employerReportPhotos[i];
               if (img.uri) {
                 const path = await saveBase64ToFile(img.uri, `employer_report_${i + 1}.jpg`);
-                attachments.push(path);
+                if (path) attachments.push(path);
               }
             }
           }
           if (updatedFormData.referralLetterPages?.length) {
             try {
+              const MAX_PDF_PAGES = 20;
+              const pagesToConvert = updatedFormData.referralLetterPages.slice(0, MAX_PDF_PAGES);
+              if (updatedFormData.referralLetterPages.length > MAX_PDF_PAGES) {
+                console.warn(`Limiting PDF to ${MAX_PDF_PAGES} pages (had ${updatedFormData.referralLetterPages.length})`);
+              }
               if (updatedFormData.referralLetterPDF) {
                 console.log('Using existing referral letter PDF');
                 const path = await saveBase64ToFile(updatedFormData.referralLetterPDF, 'referral_letter.pdf');
-                attachments.push(path);
-              } else {
+                if (path) attachments.push(path);
+              } else if (pagesToConvert.length > 0) {
                 console.log('Converting referral letter pages to PDF...');
-                const imageUris = updatedFormData.referralLetterPages.map(p => p.uri).filter(Boolean);
+                const imageUris = pagesToConvert.map(p => p.uri).filter(Boolean);
                 const result = await convertImagesToPDF(imageUris, 'referral_letter.pdf');
                 const pdfBase64 = result?.base64;
-                const pdfDataUri = `data:application/pdf;base64,${pdfBase64}`;
-                const path = await saveBase64ToFile(pdfDataUri, 'referral_letter.pdf');
-                attachments.push(path);
-                console.log('Referral letter PDF created and attached');
+                if (pdfBase64) {
+                  const pdfDataUri = `data:application/pdf;base64,${pdfBase64}`;
+                  const path = await saveBase64ToFile(pdfDataUri, 'referral_letter.pdf');
+                  if (path) attachments.push(path);
+                  console.log('Referral letter PDF created and attached');
+                }
               }
             } catch (pdfErr) {
               console.error('Failed to create referral letter PDF, falling back to JPEGs:', pdfErr);
@@ -1003,7 +1028,7 @@ export default function COIDAFormScreen() {
                 const img = updatedFormData.referralLetterPages[i];
                 if (img.uri) {
                   const path = await saveBase64ToFile(img.uri, `referral_letter_${i + 1}.jpg`);
-                  attachments.push(path);
+                  if (path) attachments.push(path);
                 }
               }
             }
@@ -1013,7 +1038,7 @@ export default function COIDAFormScreen() {
               const img = updatedFormData.attachmentPhotos[i];
               if (img.uri) {
                 const path = await saveBase64ToFile(img.uri, `attachment_${i + 1}.jpg`);
-                attachments.push(path);
+                if (path) attachments.push(path);
               }
             }
           }
@@ -1042,7 +1067,7 @@ export default function COIDAFormScreen() {
             const base64Excel = generateClaimSpreadsheet(excelFormData as any);
             const excelFilename = `COIDA_${updatedFormData.patientLastName}_${updatedFormData.patientFirstName}_${new Date().toISOString().split('T')[0]}.xlsx`;
             const excelPath = await saveBase64ToFile(`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64Excel}`, excelFilename);
-            attachments.push(excelPath);
+            if (excelPath) attachments.push(excelPath);
             console.log('Excel spreadsheet attached:', excelFilename);
           } catch (excelErr) {
             console.error('Failed to generate Excel attachment:', excelErr);
