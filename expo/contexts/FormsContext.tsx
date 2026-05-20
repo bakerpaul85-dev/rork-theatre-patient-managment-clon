@@ -525,19 +525,31 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     await AsyncStorage.setItem(FORMS_INDEX_KEY, JSON.stringify(formIds));
   }, []);
 
-  const saveForms = useCallback(async (updatedForms: any[]) => {
+  const saveSingleForm = useCallback(async (form: any): Promise<void> => {
+    const { strippedForm, photoSavePromises } = stripPhotosFromForm(form);
+    await Promise.all(photoSavePromises);
+    await saveFormToStorage(strippedForm);
+  }, [stripPhotosFromForm, saveFormToStorage]);
+
+  const saveForms = useCallback(async (updatedForms: any[], options?: { skipPhotoStrip?: boolean }) => {
     try {
       const allPhotoPromises: Promise<void>[] = [];
       const formIds: string[] = [];
       
       for (const form of updatedForms) {
-        const { strippedForm, photoSavePromises } = stripPhotosFromForm(form);
-        allPhotoPromises.push(...photoSavePromises);
         formIds.push(form.id);
-        await saveFormToStorage(strippedForm);
+        if (options?.skipPhotoStrip) {
+          await saveFormToStorage(form);
+        } else {
+          const { strippedForm, photoSavePromises } = stripPhotosFromForm(form);
+          allPhotoPromises.push(...photoSavePromises);
+          await saveFormToStorage(strippedForm);
+        }
       }
       
-      await Promise.all(allPhotoPromises);
+      if (!options?.skipPhotoStrip) {
+        await Promise.all(allPhotoPromises);
+      }
       await updateFormIndex(formIds);
       
       setForms(updatedForms);
@@ -560,19 +572,28 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       updatedAt: now,
     };
     
+    await saveSingleForm(newForm);
+    
     const updatedForms = [...forms, newForm];
-    await saveForms(updatedForms);
+    await updateFormIndex(updatedForms.map(f => f.id));
+    setForms(updatedForms);
     return newForm.id;
-  }, [forms, saveForms]);
+  }, [forms, saveSingleForm, updateFormIndex]);
 
   const updateDraft = useCallback(async (id: string, formData: Partial<FormData>) => {
+    const existingForm = forms.find(form => form.id === id);
+    if (!existingForm) {
+      throw new Error(`Form ${id} not found`);
+    }
+    const updatedForm = { ...existingForm, ...formData, updatedAt: new Date().toISOString() };
     const updatedForms = forms.map(form => 
-      form.id === id 
-        ? { ...form, ...formData, updatedAt: new Date().toISOString() }
-        : form
+      form.id === id ? updatedForm : form
     );
-    await saveForms(updatedForms);
-  }, [forms, saveForms]);
+    
+    await saveSingleForm(updatedForm);
+    await updateFormIndex(updatedForms.map(f => f.id));
+    setForms(updatedForms);
+  }, [forms, saveSingleForm, updateFormIndex]);
 
   const submitForm = useCallback(async (id: string, formData: Partial<FormData>, username?: string) => {
     console.log('Running cleanup before submission...');
@@ -875,7 +896,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         updatedAt: now,
       };
     });
-    await saveForms(updatedForms);
+    await saveForms(updatedForms, { skipPhotoStrip: true });
     console.log(`[FormsContext] Form ${id} moved back to draft for resubmission with photos restored`);
   }, [forms, saveForms, loadFormWithPhotos]);
 
@@ -886,7 +907,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       const history = [...(form.caseStatusHistory || []), { status: caseStatus, timestamp: now, updatedBy }];
       return { ...form, caseStatus, caseStatusHistory: history, updatedAt: now };
     });
-    await saveForms(updatedForms);
+    await saveForms(updatedForms, { skipPhotoStrip: true });
     console.log(`[FormsContext] Case status updated to ${caseStatus} for form ${id}`);
 
     const updatedForm = updatedForms.find(f => f.id === id);
