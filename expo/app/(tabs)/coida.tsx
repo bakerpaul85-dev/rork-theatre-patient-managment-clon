@@ -866,7 +866,7 @@ export default function COIDAFormScreen() {
         `Date of Procedure: ${updatedFormData.dateOfProcedure}\n\n` +
         `Time In Theatre: ${updatedFormData.timeInTheatre}\n` +
         `Time Out Theatre: ${updatedFormData.timeOutTheatre}\n` +
-        `Screening Time: ${((): string => { const t = updatedFormData.fluoroscopyTime; if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
+        `Screening Time: ${((): string => { const t = String(updatedFormData.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +

@@ -734,7 +734,7 @@ export default function MedicalAidFormScreen() {
         `Time C Arm In: ${updatedFormData.timeCArmTakenIn}\n` +
         `Time C Arm Out: ${updatedFormData.timeCArmTakenOut}\n` +
         `Number of Sessions: ${updatedFormData.numberOfSessions}\n` +
-        `Screening Time: ${((): string => { const t = updatedFormData.screeningTimeText; if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
+        `Screening Time: ${((): string => { const t = String(updatedFormData.screeningTimeText ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +

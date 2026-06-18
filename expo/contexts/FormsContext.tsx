@@ -340,9 +340,16 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
       }
 
       if (parsedForms.length > 0) {
-        const formsWithPhotos = await Promise.all(
-          parsedForms.map(form => loadFormWithPhotos(form))
-        );
+        const formsWithPhotos: any[] = [];
+        for (const form of parsedForms) {
+          try {
+            const formWithPhotos = await loadFormWithPhotos(form);
+            formsWithPhotos.push(formWithPhotos);
+          } catch (err) {
+            console.error(`Failed to load photos for form ${form?.id}:`, err);
+            formsWithPhotos.push(form);
+          }
+        }
         setForms(formsWithPhotos);
       }
     } catch (error) {

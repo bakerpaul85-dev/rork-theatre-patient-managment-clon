@@ -298,13 +298,13 @@ export default function WorklistScreen() {
 
       if (searchText.trim()) {
         const lower = searchText.toLowerCase();
-        const fullName = `${p.patientFirstName} ${p.patientLastName}`.toLowerCase();
+        const fullName = `${p.patientFirstName || ''} ${p.patientLastName || ''}`.toLowerCase();
         const match =
           fullName.includes(lower) ||
-          p.idNumber.toLowerCase().includes(lower) ||
-          p.procedure.toLowerCase().includes(lower) ||
-          p.employerName.toLowerCase().includes(lower) ||
-          p.medicalAidName.toLowerCase().includes(lower);
+          String(p.idNumber || '').toLowerCase().includes(lower) ||
+          String(p.procedure || '').toLowerCase().includes(lower) ||
+          String(p.employerName || '').toLowerCase().includes(lower) ||
+          String(p.medicalAidName || '').toLowerCase().includes(lower);
         if (!match) continue;
       }
 
@@ -494,11 +494,20 @@ export default function WorklistScreen() {
       dateOfBirth: '',
       contactNumber: manualForm.contactNumber.trim(),
       email: '',
+      patientAddress: '',
+      mainMemberTitle: '',
+      mainMemberFirstName: '',
+      mainMemberLastName: '',
+      mainMemberIdNumber: '',
+      mainMemberEmail: '',
+      mainMemberPhone: '',
       medicalAidName: manualForm.medicalAidName.trim(),
+      medicalAidPlan: '',
       membershipNumber: manualForm.membershipNumber.trim(),
       dependantCode: '',
       procedure: manualForm.procedure.trim(),
       icd10Code: '',
+      doctorPracticeNumber: '',
       coidaNumber: '',
       iodClaimNumber: '',
       employerName: '',
@@ -508,6 +517,13 @@ export default function WorklistScreen() {
       ward: manualForm.ward.trim(),
       hospital: manualForm.hospital.trim(),
       dateOfProcedure: dateStr,
+      estimatedStartDateTime: '',
+      estimatedEndDateTime: '',
+      actualStartDateTime: '',
+      actualEndDateTime: '',
+      caseType: '',
+      caseComments: '',
+      radiographerComments: '',
       formType: manualForm.medicalAidName ? 'medical-aid' : 'unknown',
       rawData: { notes: manualForm.notes.trim(), source: 'manual' },
     };
