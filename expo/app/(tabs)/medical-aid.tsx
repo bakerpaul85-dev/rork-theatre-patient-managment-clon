@@ -40,9 +40,9 @@ interface FormData {
   contactNumber: string;
   email: string;
   hospitalServiceProvider: string;
-  ward: string;
   referringDoctor: string;
   doctorPracticeNumber: string;
+  numberOfSessions: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
@@ -51,8 +51,6 @@ interface FormData {
   medicalAidPlan: string;
   membershipNumber: string;
   dependantCode: string;
-  nextOfKinName: string;
-  nextOfKinContactNumber: string;
   procedure: string;
   icd10Code: string;
   timeInTheatrePhoto: string | null;
@@ -286,7 +284,7 @@ export default function MedicalAidFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm } = useForms();
   const router = useRouter();
-  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_ward?: string; wl_fromWorklist?: string; wl_atRecordId?: string; wl_atBaseId?: string; wl_atTableId?: string }>();
+  const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_fromWorklist?: string; wl_atRecordId?: string; wl_atBaseId?: string; wl_atTableId?: string }>();
   const isFromWorklist = params.wl_fromWorklist === 'true';
   const [currentFormId, setCurrentFormId] = useState<string | null>(params.formId || null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -331,9 +329,9 @@ export default function MedicalAidFormScreen() {
     contactNumber: '',
     email: '',
     hospitalServiceProvider: '',
-    ward: '',
     referringDoctor: '',
     doctorPracticeNumber: '',
+    numberOfSessions: '',
     mainMemberTitle: 'Mr',
     mainMemberFirstName: '',
     mainMemberLastName: '',
@@ -342,8 +340,6 @@ export default function MedicalAidFormScreen() {
     medicalAidPlan: '',
     membershipNumber: '',
     dependantCode: '',
-    nextOfKinName: '',
-    nextOfKinContactNumber: '',
     procedure: '',
     icd10Code: '',
     timeInTheatrePhoto: null,
@@ -366,7 +362,7 @@ export default function MedicalAidFormScreen() {
     if (params.formId && typeof params.formId === 'string') {
       const existingForm = getForm(params.formId);
       if (existingForm) {
-        setFormData(existingForm);
+        setFormData({ ...getInitialFormData(), ...(existingForm as any) } as FormData);
         setCurrentFormId(params.formId);
         hasUnsavedChangesRef.current = false;
       }
@@ -411,7 +407,6 @@ export default function MedicalAidFormScreen() {
         if (params.wl_mainMemberLastName) freshForm.mainMemberLastName = params.wl_mainMemberLastName;
         if (params.wl_mainMemberIdNumber) freshForm.mainMemberIdNumber = params.wl_mainMemberIdNumber;
         if (params.wl_hospital) freshForm.hospitalServiceProvider = params.wl_hospital;
-        if (params.wl_ward) freshForm.ward = params.wl_ward;
         if (params.wl_referringDoctor) freshForm.referringDoctor = params.wl_referringDoctor;
         if (params.wl_doctorPracticeNumber) freshForm.doctorPracticeNumber = params.wl_doctorPracticeNumber;
         if (params.wl_atRecordId) (freshForm as any).airtableRecordId = params.wl_atRecordId;
@@ -423,7 +418,7 @@ export default function MedicalAidFormScreen() {
       setCurrentFormId(null);
       hasUnsavedChangesRef.current = false;
     }
-  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_medicalAidPlan, params.wl_membershipNumber, params.wl_dependantCode, params.wl_dateOfProcedure, params.wl_mainMemberTitle, params.wl_mainMemberFirstName, params.wl_mainMemberLastName, params.wl_mainMemberIdNumber, params.wl_referringDoctor, params.wl_doctorPracticeNumber, params.wl_hospital, params.wl_ward]);
+  }, [params.formId, getForm, user?.name, params.wl_firstName, params.wl_lastName, params.wl_idNumber, params.wl_title, params.wl_dob, params.wl_contact, params.wl_email, params.wl_procedure, params.wl_icd10, params.wl_medicalAid, params.wl_medicalAidPlan, params.wl_membershipNumber, params.wl_dependantCode, params.wl_dateOfProcedure, params.wl_mainMemberTitle, params.wl_mainMemberFirstName, params.wl_mainMemberLastName, params.wl_mainMemberIdNumber, params.wl_referringDoctor, params.wl_doctorPracticeNumber, params.wl_hospital]);
 
   useEffect(() => {
     const hasData = Boolean(
@@ -638,7 +633,10 @@ export default function MedicalAidFormScreen() {
       { field: formData.medicalAidName, name: 'Medical Aid Name' },
       { field: formData.membershipNumber, name: 'Membership Number' },
       { field: formData.dependantCode, name: 'Dependant Code' },
+      { field: formData.referringDoctor, name: 'Referring Doctor' },
+      { field: formData.doctorPracticeNumber, name: 'Doctor Practice Number' },
       { field: formData.procedure, name: 'Procedure' },
+      { field: formData.numberOfSessions, name: 'Number of Sessions' },
       { field: formData.timeInTheatrePhoto, name: 'Clock In Theatre Photo' },
       { field: formData.timeCArmTakenIn, name: 'Time C Arm Taken In' },
       { field: formData.timeOutTheatrePhoto, name: 'Clock Out Theatre Photo' },
@@ -701,12 +699,12 @@ export default function MedicalAidFormScreen() {
       };
 
       if (currentFormId) {
-        await submitForm(currentFormId, updatedFormData, user?.username);
+        await submitForm(currentFormId, updatedFormData as any, user?.username);
       } else {
-        const newFormId = await saveDraft(updatedFormData);
+        const newFormId = await saveDraft(updatedFormData as any);
         console.log('Draft saved with ID:', newFormId, 'Now submitting...');
         await new Promise(resolve => setTimeout(resolve, 500));
-        await submitForm(newFormId, updatedFormData, user?.username);
+        await submitForm(newFormId, updatedFormData as any, user?.username);
       }
 
       setFormData(getInitialFormData());
@@ -723,7 +721,6 @@ export default function MedicalAidFormScreen() {
         `Contact: ${updatedFormData.contactNumber}\n` +
         `Email: ${updatedFormData.email}\n\n` +
         `Hospital/Service Provider: ${updatedFormData.hospitalServiceProvider}\n` +
-        `Ward/Theatre: ${updatedFormData.ward}\n` +
         `Referring Doctor: ${updatedFormData.referringDoctor}\n` +
         `Doctor Practice Number: ${updatedFormData.doctorPracticeNumber}\n\n` +
         `Main Member: ${updatedFormData.mainMemberTitle} ${updatedFormData.mainMemberFirstName} ${updatedFormData.mainMemberLastName}\n` +
@@ -736,7 +733,8 @@ export default function MedicalAidFormScreen() {
         `ICD10 Code: ${updatedFormData.icd10Code}\n\n` +
         `Time C Arm In: ${updatedFormData.timeCArmTakenIn}\n` +
         `Time C Arm Out: ${updatedFormData.timeCArmTakenOut}\n` +
-        `Screening Time: ${updatedFormData.screeningTimeText}\n` +
+        `Number of Sessions: ${updatedFormData.numberOfSessions}\n` +
+        `Screening Time: ${((): string => { const t = updatedFormData.screeningTimeText; if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
@@ -810,7 +808,7 @@ export default function MedicalAidFormScreen() {
               status: 'submitted' as const,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
-            } as ContextFormData;
+            } as any as ContextFormData;
             const hl7File = generateHL7File(hl7FormData);
             const hl7Path = `${tempDir}${hl7File.filename}`;
             await FileSystem.writeAsStringAsync(hl7Path, hl7File.content, {
@@ -1050,34 +1048,23 @@ export default function MedicalAidFormScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Ward / Theatre</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.ward}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, ward: value }))}
-              placeholder="Enter ward or theatre (optional)"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Referring Doctor</Text>
+            <Text style={styles.label}>Referring Doctor *</Text>
             <TextInput
               style={styles.input}
               value={formData.referringDoctor}
               onChangeText={(value) => setFormData(prev => ({ ...prev, referringDoctor: value }))}
-              placeholder="Enter referring doctor name (optional)"
+              placeholder="Enter referring doctor name"
               editable={!isReadOnly}
             />
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Doctor Practice Number</Text>
+            <Text style={styles.label}>Doctor Practice Number *</Text>
             <TextInput
               style={styles.input}
               value={formData.doctorPracticeNumber}
               onChangeText={(value) => setFormData(prev => ({ ...prev, doctorPracticeNumber: value }))}
-              placeholder="Enter practice number (optional)"
+              placeholder="Enter practice number"
               editable={!isReadOnly}
             />
           </View>
@@ -1202,31 +1189,6 @@ export default function MedicalAidFormScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Next of Kin</Text>
-          
-          <View style={styles.field}>
-            <Text style={styles.label}>Next of Kin Name</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.nextOfKinName}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, nextOfKinName: value }))}
-              placeholder="Enter next of kin name (optional)"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Next of Kin Contact Number</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.nextOfKinContactNumber}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, nextOfKinContactNumber: value }))}
-              placeholder="Enter contact number (optional)"
-              keyboardType="phone-pad"
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Procedure Information</Text>
           
           <View style={styles.field}>
@@ -1334,12 +1296,22 @@ export default function MedicalAidFormScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Screening Time (Seconds)</Text>
+            <Text style={styles.label}>Screening Time (min:sec)</Text>
             <TextInput
               style={styles.input}
               value={formData.screeningTimeText}
               onChangeText={(value) => setFormData(prev => ({ ...prev, screeningTimeText: value }))}
-              placeholder="Enter screening time (optional)"
+              placeholder="e.g. 3:35"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Number of Sessions (per 30 min) *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.numberOfSessions}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, numberOfSessions: value.replace(/\D/g, '') }))}
+              placeholder="Enter number of 30-min sessions"
               keyboardType="numeric"
             />
           </View>

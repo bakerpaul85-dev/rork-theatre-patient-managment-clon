@@ -755,7 +755,7 @@ export default function COIDAFormScreen() {
       { field: formData.timeInTheatre, name: 'Time in Theatre' },
       { field: formData.cArmImages.length > 0, name: 'C Arm Images' },
       { field: formData.screeningTimePhoto, name: 'Screening Time Photo' },
-      { field: formData.fluoroscopyTime, name: 'Fluoroscopy Time' },
+      { field: formData.fluoroscopyTime, name: 'Screening Time' },
       { field: formData.timeOutTheatreClockPhoto, name: 'Time Out Theatre Clock Photo' },
       { field: formData.timeOutTheatre, name: 'Time out Theatre' },
       { field: formData.patientFirstName, name: 'First Name' },
@@ -866,7 +866,7 @@ export default function COIDAFormScreen() {
         `Date of Procedure: ${updatedFormData.dateOfProcedure}\n\n` +
         `Time In Theatre: ${updatedFormData.timeInTheatre}\n` +
         `Time Out Theatre: ${updatedFormData.timeOutTheatre}\n` +
-        `Fluoroscopy Time: ${updatedFormData.fluoroscopyTime}s\n` +
+        `Screening Time: ${((): string => { const t = updatedFormData.fluoroscopyTime; if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
@@ -1601,13 +1601,15 @@ export default function COIDAFormScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Fluoroscopy Time (in seconds) *</Text>
+            <Text style={styles.label}>Screening Time (min:sec) *</Text>
             <TextInput
               style={styles.input}
               value={formData.fluoroscopyTime}
-              onChangeText={(value) => handleNumericInput('fluoroscopyTime', value)}
-              placeholder="Enter time in seconds (e.g., 120)"
-              keyboardType="numeric"
+              onChangeText={(value) => {
+                const cleaned = value.replace(/[^0-9:]/g, '');
+                setFormData(prev => ({ ...prev, fluoroscopyTime: cleaned }));
+              }}
+              placeholder="e.g. 3:35"
               editable={!isReadOnly}
             />
           </View>
