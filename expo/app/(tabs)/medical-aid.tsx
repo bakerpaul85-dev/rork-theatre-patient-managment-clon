@@ -19,6 +19,7 @@ import { generateHL7File } from '@/utils/hl7Generator';
 import { FormData as ContextFormData } from '@/contexts/FormsContext';
 import { Camera, X, Check, Save, Search, ChevronDown, XCircle, CheckSquare, Square, MapPin } from 'lucide-react-native';
 import { MEDICAL_AID_NAMES } from '@/constants/medicalAids';
+import { PROCEDURE_OPTIONS } from '@/constants/procedures';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
@@ -61,6 +62,10 @@ interface FormData {
   timeOutTheatrePhoto: string | null;
   timeOutTheatrePhotoMetadata?: PhotoMetadata;
   timeCArmTakenOut: string;
+  cArmOwnedByHospital: string;
+  contrastUsage: string;
+  contrastName: string;
+  contrastAmount: string;
   radiographerName: string;
   radiographerSignatureTimestamp: string;
   radiographerSignatureLocation: string;
@@ -72,6 +77,137 @@ interface MedicalAidDropdownProps {
   value: string;
   onSelect: (value: string) => void;
   disabled?: boolean;
+}
+
+interface ProcedureDropdownProps {
+  value: string;
+  onSelect: (value: string) => void;
+  disabled?: boolean;
+}
+
+function ProcedureDropdown({ value, onSelect, disabled }: ProcedureDropdownProps) {
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [searchText, setSearchText] = useState<string>('');
+
+  const filteredItems = useMemo(() => {
+    const opts = PROCEDURE_OPTIONS ?? [];
+    if (!searchText.trim()) return [...opts];
+    const lower = searchText.toLowerCase();
+    return opts.filter(p =>
+      p.name.toLowerCase().includes(lower) || p.code.includes(lower)
+    );
+  }, [searchText]);
+
+  const handleSelect = useCallback((item: { code: string; name: string }) => {
+    onSelect(`${item.code} - ${item.name}`);
+    setSearchText('');
+    setIsOpen(false);
+    Keyboard.dismiss();
+  }, [onSelect]);
+
+  const handleClear = useCallback(() => {
+    onSelect('');
+    setSearchText('');
+  }, [onSelect]);
+
+  const handleOpen = useCallback(() => {
+    if (disabled) return;
+    setIsOpen(true);
+    setSearchText('');
+  }, [disabled]);
+
+  if (isOpen) {
+    return (
+      <View style={dropdownStyles.field}>
+        <Text style={dropdownStyles.label}>Procedure *</Text>
+        <View style={dropdownStyles.searchContainer}>
+          <Search size={18} color="#999" />
+          <TextInput
+            style={dropdownStyles.searchInput}
+            value={searchText}
+            onChangeText={setSearchText}
+            placeholder="Search by code or name..."
+            autoFocus
+            autoCapitalize="none"
+          />
+          <TouchableOpacity onPress={() => { setIsOpen(false); setSearchText(''); }}>
+            <X size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+        <View style={dropdownStyles.listContainer}>
+          <ScrollView
+            style={dropdownStyles.list}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
+            {filteredItems.length === 0 ? (
+              <View style={dropdownStyles.emptyContainer}>
+                <Text style={dropdownStyles.emptyText}>No results found</Text>
+              </View>
+            ) : (
+              filteredItems.map((item) => {
+                const displayValue = `${item.code} - ${item.name}`;
+                return (
+                  <TouchableOpacity
+                    key={item.code}
+                    style={[
+                      dropdownStyles.listItem,
+                      value === displayValue && dropdownStyles.listItemActive,
+                    ]}
+                    onPress={() => handleSelect(item)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[dropdownStyles.listItemCode, value === displayValue && dropdownStyles.listItemTextActive]}>
+                        {item.code}
+                      </Text>
+                      <Text
+                        style={[
+                          dropdownStyles.listItemText,
+                          value === displayValue && dropdownStyles.listItemTextActive,
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
+                    {value === displayValue && <Check size={16} color="#0066CC" />}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={dropdownStyles.field}>
+      <Text style={dropdownStyles.label}>Procedure *</Text>
+      <TouchableOpacity
+        style={dropdownStyles.selector}
+        onPress={handleOpen}
+        disabled={disabled}
+      >
+        <Text
+          style={[
+            dropdownStyles.selectorText,
+            !value && dropdownStyles.selectorPlaceholder,
+          ]}
+          numberOfLines={1}
+        >
+          {value || 'Select procedure'}
+        </Text>
+        <View style={dropdownStyles.selectorIcons}>
+          {value ? (
+            <TouchableOpacity onPress={handleClear} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <XCircle size={20} color="#999" />
+            </TouchableOpacity>
+          ) : null}
+          <ChevronDown size={20} color="#666" />
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 function MedicalAidDropdown({ value, onSelect, disabled }: MedicalAidDropdownProps) {
@@ -261,8 +397,14 @@ const dropdownStyles = StyleSheet.create({
   listItemActive: {
     backgroundColor: '#E7F3FF',
   },
+  listItemCode: {
+    fontSize: 12,
+    color: '#0066CC',
+    fontWeight: '600' as const,
+    marginBottom: 1,
+  },
   listItemText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#333333',
     flex: 1,
   },
@@ -302,6 +444,12 @@ export default function MedicalAidFormScreen() {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}${month}${year}`;
+  };
+
+  const safeParamStr = (value: unknown): string => {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return String(value[0] ?? '');
+    return String(value);
   };
 
   const matchMedicalAidName = (input: string): string => {
@@ -348,6 +496,10 @@ export default function MedicalAidFormScreen() {
     timeCArmTakenIn: '',
     timeOutTheatrePhoto: null,
     timeCArmTakenOut: '',
+    cArmOwnedByHospital: '',
+    contrastUsage: '',
+    contrastName: '',
+    contrastAmount: '',
     radiographerName: user?.name || 'Dr. Smith',
     radiographerSignatureTimestamp: '',
     radiographerSignatureLocation: '',
@@ -371,44 +523,45 @@ export default function MedicalAidFormScreen() {
 
       if (params.wl_firstName || params.wl_lastName || params.wl_idNumber) {
         console.log('[MedicalAid] Loading worklist patient data into form');
-        if (params.wl_firstName) freshForm.patientFirstName = params.wl_firstName;
-        if (params.wl_lastName) freshForm.patientLastName = params.wl_lastName;
-        if (params.wl_title) {
+        const s = safeParamStr;
+        const wlFirstName = s(params.wl_firstName); if (wlFirstName) freshForm.patientFirstName = wlFirstName;
+        const wlLastName = s(params.wl_lastName); if (wlLastName) freshForm.patientLastName = wlLastName;
+        const wlTitle = s(params.wl_title); if (wlTitle) {
           const validTitles: Title[] = ['Mr', 'Mrs', 'Miss', 'Ms', 'Dr', 'Prof'];
-          const matched = validTitles.find(t => t.toLowerCase() === params.wl_title?.toLowerCase());
+          const matched = validTitles.find(t => t.toLowerCase() === wlTitle.toLowerCase());
           if (matched) freshForm.patientTitle = matched;
         }
-        if (params.wl_idNumber) {
-          freshForm.idNumber = params.wl_idNumber;
-          const isNumericOnly = /^\d+$/.test(params.wl_idNumber);
-          if (isNumericOnly && params.wl_idNumber.length === 13) {
-            freshForm.dateOfBirth = parseSouthAfricanID(params.wl_idNumber);
+        const wlIdNumber = s(params.wl_idNumber); if (wlIdNumber) {
+          freshForm.idNumber = wlIdNumber;
+          const isNumericOnly = /^\d+$/.test(wlIdNumber);
+          if (isNumericOnly && wlIdNumber.length === 13) {
+            freshForm.dateOfBirth = parseSouthAfricanID(wlIdNumber);
           }
         }
-        if (params.wl_dob) freshForm.dateOfBirth = params.wl_dob;
-        if (params.wl_contact) freshForm.contactNumber = params.wl_contact;
-        if (params.wl_email) freshForm.email = params.wl_email;
-        if (params.wl_procedure) freshForm.procedure = params.wl_procedure;
-        if (params.wl_icd10) freshForm.icd10Code = params.wl_icd10;
-        if (params.wl_medicalAid) freshForm.medicalAidName = matchMedicalAidName(params.wl_medicalAid);
-        if (params.wl_medicalAidPlan) freshForm.medicalAidPlan = params.wl_medicalAidPlan;
-        if (params.wl_membershipNumber) freshForm.membershipNumber = params.wl_membershipNumber;
-        if (params.wl_dependantCode) freshForm.dependantCode = params.wl_dependantCode;
-        if (params.wl_dateOfProcedure) {
-          const stripped = params.wl_dateOfProcedure.replace(/\//g, '');
+        const wlDob = s(params.wl_dob); if (wlDob) freshForm.dateOfBirth = wlDob;
+        const wlContact = s(params.wl_contact); if (wlContact) freshForm.contactNumber = wlContact;
+        const wlEmail = s(params.wl_email); if (wlEmail) freshForm.email = wlEmail;
+        const wlProcedure = s(params.wl_procedure); if (wlProcedure) freshForm.procedure = wlProcedure;
+        const wlIcd10 = s(params.wl_icd10); if (wlIcd10) freshForm.icd10Code = wlIcd10;
+        const wlMedicalAid = s(params.wl_medicalAid); if (wlMedicalAid) freshForm.medicalAidName = matchMedicalAidName(wlMedicalAid);
+        const wlMedicalAidPlan = s(params.wl_medicalAidPlan); if (wlMedicalAidPlan) freshForm.medicalAidPlan = wlMedicalAidPlan;
+        const wlMembershipNumber = s(params.wl_membershipNumber); if (wlMembershipNumber) freshForm.membershipNumber = wlMembershipNumber;
+        const wlDependantCode = s(params.wl_dependantCode); if (wlDependantCode) freshForm.dependantCode = wlDependantCode;
+        const wlDateOfProcedure = s(params.wl_dateOfProcedure); if (wlDateOfProcedure) {
+          const stripped = wlDateOfProcedure.replace(/\//g, '');
           if (stripped.length === 8) freshForm.date = stripped;
         }
-        if (params.wl_mainMemberTitle) {
-          const validTitles: Title[] = ['Mr', 'Mrs', 'Miss', 'Ms', 'Dr', 'Prof'];
-          const matched = validTitles.find(t => t.toLowerCase() === params.wl_mainMemberTitle?.toLowerCase());
-          if (matched) freshForm.mainMemberTitle = matched;
+        const wlMainMemberTitle = s(params.wl_mainMemberTitle); if (wlMainMemberTitle) {
+          const validTitles2: Title[] = ['Mr', 'Mrs', 'Miss', 'Ms', 'Dr', 'Prof'];
+          const matched2 = validTitles2.find(t => t.toLowerCase() === wlMainMemberTitle.toLowerCase());
+          if (matched2) freshForm.mainMemberTitle = matched2;
         }
-        if (params.wl_mainMemberFirstName) freshForm.mainMemberFirstName = params.wl_mainMemberFirstName;
-        if (params.wl_mainMemberLastName) freshForm.mainMemberLastName = params.wl_mainMemberLastName;
-        if (params.wl_mainMemberIdNumber) freshForm.mainMemberIdNumber = params.wl_mainMemberIdNumber;
-        if (params.wl_hospital) freshForm.hospitalServiceProvider = params.wl_hospital;
-        if (params.wl_referringDoctor) freshForm.referringDoctor = params.wl_referringDoctor;
-        if (params.wl_doctorPracticeNumber) freshForm.doctorPracticeNumber = params.wl_doctorPracticeNumber;
+        const wlMainMemberFirstName = s(params.wl_mainMemberFirstName); if (wlMainMemberFirstName) freshForm.mainMemberFirstName = wlMainMemberFirstName;
+        const wlMainMemberLastName = s(params.wl_mainMemberLastName); if (wlMainMemberLastName) freshForm.mainMemberLastName = wlMainMemberLastName;
+        const wlMainMemberIdNumber = s(params.wl_mainMemberIdNumber); if (wlMainMemberIdNumber) freshForm.mainMemberIdNumber = wlMainMemberIdNumber;
+        const wlHospital = s(params.wl_hospital); if (wlHospital) freshForm.hospitalServiceProvider = wlHospital;
+        const wlReferringDoctor = s(params.wl_referringDoctor); if (wlReferringDoctor) freshForm.referringDoctor = wlReferringDoctor;
+        const wlDoctorPracticeNumber = s(params.wl_doctorPracticeNumber); if (wlDoctorPracticeNumber) freshForm.doctorPracticeNumber = wlDoctorPracticeNumber;
         if (params.wl_atRecordId) (freshForm as any).airtableRecordId = params.wl_atRecordId;
         if (params.wl_atBaseId) (freshForm as any).airtableBaseId = params.wl_atBaseId;
         if (params.wl_atTableId) (freshForm as any).airtableTableId = params.wl_atTableId;
@@ -621,7 +774,7 @@ export default function MedicalAidFormScreen() {
   };
 
   const validateRequiredFields = (): boolean => {
-    const requiredFields = [
+    const requiredFields: Array<{ field: any; name: string }> = [
       { field: formData.hospitalStickerPhoto, name: 'Hospital Sticker Photo' },
       { field: formData.patientFirstName, name: 'Patient First Name' },
       { field: formData.patientLastName, name: 'Patient Last Name' },
@@ -637,11 +790,18 @@ export default function MedicalAidFormScreen() {
       { field: formData.doctorPracticeNumber, name: 'Doctor Practice Number' },
       { field: formData.procedure, name: 'Procedure' },
       { field: formData.numberOfSessions, name: 'Number of Sessions' },
+      { field: formData.cArmOwnedByHospital, name: 'C-Arm Owned by Hospital' },
+      { field: formData.contrastUsage, name: 'Contrast Usage' },
       { field: formData.timeInTheatrePhoto, name: 'Clock In Theatre Photo' },
       { field: formData.timeCArmTakenIn, name: 'Time C Arm Taken In' },
       { field: formData.timeOutTheatrePhoto, name: 'Clock Out Theatre Photo' },
       { field: formData.timeCArmTakenOut, name: 'Time C Arm Taken Out' },
     ];
+
+    if (formData.contrastUsage === 'Supplied by External') {
+      requiredFields.push({ field: formData.contrastName, name: 'Name of Contrast' });
+      requiredFields.push({ field: formData.contrastAmount, name: 'Amount Used' });
+    }
 
     const missingFields = requiredFields.filter(({ field }) => !field);
     
@@ -731,6 +891,9 @@ export default function MedicalAidFormScreen() {
         `Dependant Code: ${updatedFormData.dependantCode}\n\n` +
         `Procedure: ${updatedFormData.procedure}\n` +
         `ICD10 Code: ${updatedFormData.icd10Code}\n\n` +
+        `C-Arm Owned by Hospital: ${updatedFormData.cArmOwnedByHospital}\n` +
+        `Contrast Usage: ${updatedFormData.contrastUsage}\n` +
+        (updatedFormData.contrastUsage === 'Supplied by External' ? `Contrast Name: ${updatedFormData.contrastName}\nContrast Amount: ${updatedFormData.contrastAmount}\n` : '') +
         `Time C Arm In: ${updatedFormData.timeCArmTakenIn}\n` +
         `Time C Arm Out: ${updatedFormData.timeCArmTakenOut}\n` +
         `Number of Sessions: ${updatedFormData.numberOfSessions}\n` +
@@ -1191,17 +1354,11 @@ export default function MedicalAidFormScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Procedure Information</Text>
           
-          <View style={styles.field}>
-            <Text style={styles.label}>Procedure *</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.procedure}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, procedure: value }))}
-              placeholder="Enter procedure details"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
+          <ProcedureDropdown
+            value={formData.procedure}
+            onSelect={(value) => setFormData(prev => ({ ...prev, procedure: value }))}
+            disabled={isReadOnly}
+          />
 
           <View style={styles.field}>
             <Text style={styles.label}>ICD10 Code</Text>
@@ -1315,6 +1472,80 @@ export default function MedicalAidFormScreen() {
               keyboardType="numeric"
             />
           </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>C-Arm Owned by Hospital *</Text>
+            <View style={styles.titleContainer}>
+              {['Yes', 'No'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.titleButton,
+                    formData.cArmOwnedByHospital === option && styles.titleButtonActive,
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, cArmOwnedByHospital: option }))}
+                >
+                  <Text
+                    style={[
+                      styles.titleButtonText,
+                      formData.cArmOwnedByHospital === option && styles.titleButtonTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Contrast Usage *</Text>
+            <View style={styles.titleContainer}>
+              {['Supplied by Hospital', 'Supplied by External'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.titleButton,
+                    formData.contrastUsage === option && styles.titleButtonActive,
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, contrastUsage: option }))}
+                >
+                  <Text
+                    style={[
+                      styles.titleButtonText,
+                      formData.contrastUsage === option && styles.titleButtonTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {formData.contrastUsage === 'Supplied by External' && (
+            <>
+              <View style={styles.field}>
+                <Text style={styles.label}>Name of Contrast *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.contrastName}
+                  onChangeText={(value) => setFormData(prev => ({ ...prev, contrastName: value }))}
+                  placeholder="Enter name of contrast agent"
+                />
+              </View>
+              <View style={styles.field}>
+                <Text style={styles.label}>Amount Used *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.contrastAmount}
+                  onChangeText={(value) => setFormData(prev => ({ ...prev, contrastAmount: value }))}
+                  placeholder="Enter amount used (e.g. 100ml)"
+                />
+              </View>
+            </>
+          )}
 
           <View style={styles.field}>
             <Text style={styles.label}>Reason for time in theatre longer than anesthetic time</Text>

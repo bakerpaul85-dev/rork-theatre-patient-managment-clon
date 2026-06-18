@@ -498,6 +498,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'nextOfKinName', 'nextOfKinContactNumber',
         'procedure', 'icd10Code', 'screeningTimeText', 'reasonForTimeDiscrepancy',
         'timeCArmTakenIn', 'timeCArmTakenOut',
+        'numberOfSessions', 'cArmOwnedByHospital', 'contrastUsage', 'contrastName', 'contrastAmount',
         'radiographerName', 'radiographerSignatureTimestamp', 'radiographerSignatureLocation',
         'submissionLatitude', 'submissionLongitude',
         'cArmImagesCount', 'employerReportPhotosCount', 'attachmentPhotosCount',
@@ -584,6 +585,14 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     const updatedForms = [...forms, newForm];
     await updateFormIndex(updatedForms.map(f => f.id));
     setForms(updatedForms);
+
+    try {
+      cloudSyncBridge.triggerSync({ ...newForm, id: newForm.id, status: 'draft' });
+      console.log('[FormsContext] Draft cloud sync triggered');
+    } catch (syncError) {
+      console.error('[FormsContext] Draft cloud sync failed (draft saved locally):', syncError);
+    }
+
     return newForm.id;
   }, [forms, saveSingleForm, updateFormIndex]);
 
@@ -600,6 +609,13 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     await saveSingleForm(updatedForm);
     await updateFormIndex(updatedForms.map(f => f.id));
     setForms(updatedForms);
+
+    try {
+      cloudSyncBridge.triggerSync({ ...updatedForm, status: 'draft' });
+      console.log('[FormsContext] Updated draft cloud sync triggered');
+    } catch (syncError) {
+      console.error('[FormsContext] Updated draft cloud sync failed (draft saved locally):', syncError);
+    }
   }, [forms, saveSingleForm, updateFormIndex]);
 
   const submitForm = useCallback(async (id: string, formData: Partial<FormData>, username?: string) => {

@@ -48,9 +48,14 @@ interface CloudSyncContextValue {
 }
 
 function getOrCreateApp(config: FirebaseConfig): FirebaseApp {
-  const apps = getApps();
-  if (apps.length > 0) return getApp();
-  return initializeApp(config);
+  try {
+    const apps = getApps();
+    if (apps.length > 0) return getApp();
+    return initializeApp(config);
+  } catch (e: any) {
+    const msg = e?.message ?? e?.code ?? String(e);
+    throw new Error(`Firebase init failed: ${msg}`);
+  }
 }
 
 export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncContextValue>(() => {
@@ -70,8 +75,10 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
       const app = getOrCreateApp(firebaseConfig);
       dbRef.current = getFirestore(app);
       return dbRef.current;
-    } catch (e) {
-      console.error('[CloudSync] getDB error:', e);
+    } catch (e: any) {
+      const msg = e?.message ?? e?.code ?? String(e);
+      console.error('[CloudSync] getDB error:', msg);
+      setSyncError('Firebase init failed: ' + msg);
       return null;
     }
   }, [firebaseConfig]);
@@ -100,14 +107,17 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
   useEffect(() => {
     if (firebaseConfig && !dbRef.current) {
       try {
-        const app = getOrCreateApp(firebaseConfig);
-        dbRef.current = getFirestore(app);
-        console.log('[CloudSync] Firestore initialized successfully');
+        getDB();
+        if (dbRef.current) {
+          console.log('[CloudSync] Firestore initialized successfully');
+        }
       } catch (e: any) {
-        setSyncError('Firebase init failed: ' + (e?.message ?? String(e)));
+        const msg = e?.message ?? e?.code ?? String(e);
+        console.error('[CloudSync] Firestore init effect error:', msg);
+        setSyncError('Firebase init failed: ' + msg);
       }
     }
-  }, [firebaseConfig]);
+  }, [firebaseConfig, getDB]);
 
   const saveConfig = useCallback(async (config: FirebaseConfig) => {
     await AsyncStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(config));
@@ -155,18 +165,27 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
         screeningTimeText: form.screeningTimeText ?? '',
         timeCArmTakenIn: form.timeCArmTakenIn ?? '',
         timeCArmTakenOut: form.timeCArmTakenOut ?? '',
+        numberOfSessions: anyForm.numberOfSessions ?? '',
+        cArmOwnedByHospital: anyForm.cArmOwnedByHospital ?? '',
+        contrastUsage: anyForm.contrastUsage ?? '',
+        contrastName: anyForm.contrastName ?? '',
+        contrastAmount: anyForm.contrastAmount ?? '',
         radiographerName: form.radiographerName ?? '',
         radiographerSignatureTimestamp: form.radiographerSignatureTimestamp ?? '',
         radiographerSignatureLocation: form.radiographerSignatureLocation ?? '',
         nextOfKinName: form.nextOfKinName ?? '',
         nextOfKinContactNumber: form.nextOfKinContactNumber ?? '',
         medicalAidName: form.medicalAidName ?? '',
+        medicalAidPlan: form.medicalAidPlan ?? '',
         membershipNumber: form.membershipNumber ?? '',
         dependantCode: form.dependantCode ?? '',
         mainMemberTitle: form.mainMemberTitle ?? '',
         mainMemberFirstName: form.mainMemberFirstName ?? '',
         mainMemberLastName: form.mainMemberLastName ?? '',
         mainMemberIdNumber: form.mainMemberIdNumber ?? '',
+        hospitalServiceProvider: form.hospitalServiceProvider ?? '',
+        referringDoctor: form.referringDoctor ?? '',
+        doctorPracticeNumber: form.doctorPracticeNumber ?? '',
         submittedBy: form.submittedBy ?? '',
         createdAt: form.createdAt ?? '',
         updatedAt: form.updatedAt ?? '',

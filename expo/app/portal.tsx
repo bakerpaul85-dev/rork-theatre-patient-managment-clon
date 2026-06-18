@@ -542,6 +542,13 @@ export default function PortalScreen() {
         ['Procedure', form.procedure], ['ICD-10 Code', form.icd10Code],
         ['Medical Aid', form.medicalAidName], ['Membership #', form.membershipNumber],
         ['Dependant Code', form.dependantCode],
+        ['Number of Sessions', anyForm.numberOfSessions],
+        ['C-Arm Hospital Owned', anyForm.cArmOwnedByHospital],
+        ['Contrast Usage', anyForm.contrastUsage],
+        ...(anyForm.contrastUsage === 'Supplied by External' ? [
+          ['Contrast Name', anyForm.contrastName],
+          ['Contrast Amount', anyForm.contrastAmount],
+        ] as const : []),
       ]},
       { title: 'Theatre Details', icon: Clock, fields: [
         ['Radiographer', form.radiographerName], ['Screening Time', form.screeningTimeText],
@@ -705,6 +712,9 @@ export default function PortalScreen() {
                   ['ID Number', f.idNumber], ['Procedure', f.procedure], ['ICD-10', f.icd10Code],
                   isCoida ? ['Employer', (f as any).employerName] : ['Medical Aid', f.medicalAidName],
                   ['Contact', f.contactNumber], ['Email', f.email],
+                  ['Sessions', (f as any).numberOfSessions],
+                  ['C-Arm Owned', (f as any).cArmOwnedByHospital],
+                  ['Contrast', (f as any).contrastUsage],
                   ['Screening', f.screeningTimeText], ['C-Arm In', f.timeCArmTakenIn], ['C-Arm Out', f.timeCArmTakenOut],
                 ].filter(([, v]) => v).map(([label, value]) => (
                   <View key={String(label)} style={s.expandedDetail}>
