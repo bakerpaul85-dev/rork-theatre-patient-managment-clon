@@ -870,44 +870,46 @@ export default function COIDAFormScreen() {
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
-        `Location: ${updatedFormData.radiographerSignatureLocation}\n\n` +
+        (updatedFormData.submissionLatitude && updatedFormData.submissionLongitude
+          ? `Location: ${updatedFormData.radiographerSignatureLocation} — https://maps.google.com/?q=${updatedFormData.submissionLatitude},${updatedFormData.submissionLongitude}\n\n`
+          : `Location: ${updatedFormData.radiographerSignatureLocation}\n\n`) +
         `--- Photo GPS Locations ---\n` +
         (updatedFormData.hospitalStickerPhotoMetadata?.latitude != null
-          ? `Hospital Sticker Photo: ${updatedFormData.hospitalStickerPhotoMetadata.latitude}, ${updatedFormData.hospitalStickerPhotoMetadata.longitude} (${updatedFormData.hospitalStickerPhotoMetadata.timestamp})\n`
+          ? `Hospital Sticker Photo: https://maps.google.com/?q=${updatedFormData.hospitalStickerPhotoMetadata.latitude},${updatedFormData.hospitalStickerPhotoMetadata.longitude} (${updatedFormData.hospitalStickerPhotoMetadata.timestamp})\n`
           : updatedFormData.hospitalStickerPhoto ? `Hospital Sticker Photo: No GPS data\n` : '') +
         (updatedFormData.timeInTheatreClockPhotoMetadata?.latitude != null
-          ? `Time In Theatre Clock Photo: ${updatedFormData.timeInTheatreClockPhotoMetadata.latitude}, ${updatedFormData.timeInTheatreClockPhotoMetadata.longitude} (${updatedFormData.timeInTheatreClockPhotoMetadata.timestamp})\n`
+          ? `Time In Theatre Clock Photo: https://maps.google.com/?q=${updatedFormData.timeInTheatreClockPhotoMetadata.latitude},${updatedFormData.timeInTheatreClockPhotoMetadata.longitude} (${updatedFormData.timeInTheatreClockPhotoMetadata.timestamp})\n`
           : updatedFormData.timeInTheatreClockPhoto ? `Time In Theatre Clock Photo: No GPS data\n` : '') +
         (updatedFormData.screeningTimePhotoMetadata?.latitude != null
-          ? `Screening Time Photo: ${updatedFormData.screeningTimePhotoMetadata.latitude}, ${updatedFormData.screeningTimePhotoMetadata.longitude} (${updatedFormData.screeningTimePhotoMetadata.timestamp})\n`
+          ? `Screening Time Photo: https://maps.google.com/?q=${updatedFormData.screeningTimePhotoMetadata.latitude},${updatedFormData.screeningTimePhotoMetadata.longitude} (${updatedFormData.screeningTimePhotoMetadata.timestamp})\n`
           : updatedFormData.screeningTimePhoto ? `Screening Time Photo: No GPS data\n` : '') +
         (updatedFormData.timeOutTheatreClockPhotoMetadata?.latitude != null
-          ? `Time Out Theatre Clock Photo: ${updatedFormData.timeOutTheatreClockPhotoMetadata.latitude}, ${updatedFormData.timeOutTheatreClockPhotoMetadata.longitude} (${updatedFormData.timeOutTheatreClockPhotoMetadata.timestamp})\n`
+          ? `Time Out Theatre Clock Photo: https://maps.google.com/?q=${updatedFormData.timeOutTheatreClockPhotoMetadata.latitude},${updatedFormData.timeOutTheatreClockPhotoMetadata.longitude} (${updatedFormData.timeOutTheatreClockPhotoMetadata.timestamp})\n`
           : updatedFormData.timeOutTheatreClockPhoto ? `Time Out Theatre Clock Photo: No GPS data\n` : '') +
         (updatedFormData.firstMedicalReportPhotoMetadata?.latitude != null
-          ? `First Medical Report Photo: ${updatedFormData.firstMedicalReportPhotoMetadata.latitude}, ${updatedFormData.firstMedicalReportPhotoMetadata.longitude} (${updatedFormData.firstMedicalReportPhotoMetadata.timestamp})\n`
+          ? `First Medical Report Photo: https://maps.google.com/?q=${updatedFormData.firstMedicalReportPhotoMetadata.latitude},${updatedFormData.firstMedicalReportPhotoMetadata.longitude} (${updatedFormData.firstMedicalReportPhotoMetadata.timestamp})\n`
           : updatedFormData.firstMedicalReportPhoto ? `First Medical Report Photo: No GPS data\n` : '') +
         (updatedFormData.patientIdPhotoMetadata?.latitude != null
-          ? `Patient ID Photo: ${updatedFormData.patientIdPhotoMetadata.latitude}, ${updatedFormData.patientIdPhotoMetadata.longitude} (${updatedFormData.patientIdPhotoMetadata.timestamp})\n`
+          ? `Patient ID Photo: https://maps.google.com/?q=${updatedFormData.patientIdPhotoMetadata.latitude},${updatedFormData.patientIdPhotoMetadata.longitude} (${updatedFormData.patientIdPhotoMetadata.timestamp})\n`
           : updatedFormData.patientIdPhoto ? `Patient ID Photo: No GPS data\n` : '') +
         (updatedFormData.cArmImages?.length
           ? updatedFormData.cArmImages.map((img, i) =>
               img.metadata?.latitude != null
-                ? `C-Arm Image ${i + 1}: ${img.metadata.latitude}, ${img.metadata.longitude} (${img.metadata.timestamp})\n`
+                ? `C-Arm Image ${i + 1}: https://maps.google.com/?q=${img.metadata.latitude},${img.metadata.longitude} (${img.metadata.timestamp})\n`
                 : `C-Arm Image ${i + 1}: No GPS data\n`
             ).join('')
           : '') +
         (updatedFormData.employerReportPhotos?.length
           ? updatedFormData.employerReportPhotos.map((img, i) =>
               img.metadata?.latitude != null
-                ? `Employer Report ${i + 1}: ${img.metadata.latitude}, ${img.metadata.longitude} (${img.metadata.timestamp})\n`
+                ? `Employer Report ${i + 1}: https://maps.google.com/?q=${img.metadata.latitude},${img.metadata.longitude} (${img.metadata.timestamp})\n`
                 : `Employer Report ${i + 1}: No GPS data\n`
             ).join('')
           : '') +
         (updatedFormData.referralLetterPages?.length
           ? updatedFormData.referralLetterPages.map((img, i) =>
               img.metadata?.latitude != null
-                ? `Referral Letter Page ${i + 1}: ${img.metadata.latitude}, ${img.metadata.longitude} (${img.metadata.timestamp})\n`
+                ? `Referral Letter Page ${i + 1}: https://maps.google.com/?q=${img.metadata.latitude},${img.metadata.longitude} (${img.metadata.timestamp})\n`
                 : `Referral Letter Page ${i + 1}: No GPS data\n`
             ).join('')
           : '') +

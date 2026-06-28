@@ -67,6 +67,7 @@ export default function PortalScreen() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [expandedFormId, setExpandedFormId] = useState<string | null>(null);
   const [selectedFormDetail, setSelectedFormDetail] = useState<FormData | null>(null);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -737,7 +738,9 @@ export default function PortalScreen() {
     </>
   );
 
-  const renderUsers = () => (
+  const renderUsers = () => {
+    const getUserForms = (u: CloudUser) => cloudForms.filter(f => (f as any).userEmail === u.email || (f as any).uid === u.uid);
+    return (
     <>
       <View style={s.pageHeader}>
         <View>
@@ -754,33 +757,74 @@ export default function PortalScreen() {
       )}
       {cloudUsers.map((u, i) => {
         const initials = ((u.name || u.email || '?') as string).split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-        const userForms = cloudForms.filter(f => (f as any).userEmail === u.email || (f as any).uid === u.uid);
+        const userForms = getUserForms(u);
         const submitted = userForms.filter(f => f.status === 'submitted').length;
+        const drafts = userForms.filter(f => f.status === 'draft');
+        const expanded = expandedUserId === u.id;
         return (
-          <View key={u.id ?? i} style={s.userCard}>
-            <View style={s.userAvatar}>
-              <Text style={s.userAvatarTxt}>{initials}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.userCardName}>{u.name || 'Unnamed'}</Text>
-              <View style={s.userMetaRow}>
-                <Mail size={12} color="#94A3B8" />
-                <Text style={s.userCardEmail}>{u.email ?? '—'}</Text>
+          <View key={u.id ?? i} style={[s.userCard, expanded && s.userCardExpanded]}>
+            <TouchableOpacity
+              style={s.userCardMain}
+              onPress={() => setExpandedUserId(expanded ? null : (u.id ?? null))}
+              activeOpacity={0.7}
+            >
+              <View style={s.userAvatar}>
+                <Text style={s.userAvatarTxt}>{initials}</Text>
               </View>
-            </View>
-            <View style={s.userStatBlock}>
-              <Text style={s.userStatNum}>{userForms.length}</Text>
-              <Text style={s.userStatLabel}>forms</Text>
-            </View>
-            <View style={s.userStatBlock}>
-              <Text style={[s.userStatNum, { color: GREEN }]}>{submitted}</Text>
-              <Text style={s.userStatLabel}>sent</Text>
-            </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.userCardName}>{u.name || 'Unnamed'}</Text>
+                <View style={s.userMetaRow}>
+                  <Mail size={12} color="#94A3B8" />
+                  <Text style={s.userCardEmail}>{u.email ?? '—'}</Text>
+                </View>
+              </View>
+              <View style={s.userStatBlock}>
+                <Text style={s.userStatNum}>{userForms.length}</Text>
+                <Text style={s.userStatLabel}>forms</Text>
+              </View>
+              <View style={s.userStatBlock}>
+                <Text style={[s.userStatNum, { color: GREEN }]}>{submitted}</Text>
+                <Text style={s.userStatLabel}>sent</Text>
+              </View>
+              <View style={[s.userStatBlock, { minWidth: 50 }]}>
+                <Text style={[s.userStatNum, { color: AMBER }]}>{drafts.length}</Text>
+                <Text style={s.userStatLabel}>drafts</Text>
+              </View>
+              {expanded ? <ChevronUp size={16} color={SLATE} /> : <ChevronDown size={16} color={SLATE} />}
+            </TouchableOpacity>
+            {expanded && (
+              <View style={s.userDraftsSection}>
+                <Text style={s.userDraftsTitle}>Drafts ({drafts.length})</Text>
+                {drafts.length === 0 ? (
+                  <Text style={s.userDraftsEmpty}>No drafts saved by this user</Text>
+                ) : (
+                  drafts.map((f, di) => {
+                    const pName = `${f.patientTitle ?? ''} ${f.patientFirstName ?? ''} ${f.patientLastName ?? ''}`.trim() || 'Unnamed';
+                    const isCoida = f.formType === 'coida';
+                    return (
+                      <View key={f.id ?? di} style={s.userDraftRow}>
+                        <View style={[s.formTypeTag, { backgroundColor: isCoida ? '#0D948812' : '#1B6EF310' }]}>
+                          <Text style={[s.formTypeTagTxt, { color: isCoida ? TEAL : ACCENT }]}>{isCoida ? 'COIDA' : 'MED AID'}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.userDraftName} numberOfLines={1}>{pName}</Text>
+                          <Text style={s.userDraftMeta} numberOfLines={1}>{formatDate(f.updatedAt)}</Text>
+                        </View>
+                        <TouchableOpacity style={s.userDraftViewBtn} onPress={() => setSelectedFormDetail(f)}>
+                          <Eye size={13} color={ACCENT} />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            )}
           </View>
         );
       })}
     </>
   );
+  };
 
   return (
     <View style={s.root}>
@@ -928,7 +972,9 @@ const s = StyleSheet.create({
   emptyStateMsg: { fontSize: 13, color: '#94A3B8' },
   emptyMsg: { fontSize: 13, color: '#94A3B8', textAlign: 'center', paddingVertical: 20 },
 
-  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD_BG, borderRadius: 12, padding: 14, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: BORDER },
+  userCard: { backgroundColor: CARD_BG, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER, overflow: 'hidden' },
+  userCardExpanded: { borderColor: ACCENT },
+  userCardMain: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
   userAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#1B6EF310', alignItems: 'center', justifyContent: 'center' },
   userAvatarTxt: { fontSize: 15, fontWeight: '700' as const, color: ACCENT },
   userCardName: { fontSize: 14, fontWeight: '600' as const, color: DARK, marginBottom: 2 },
@@ -937,6 +983,14 @@ const s = StyleSheet.create({
   userStatBlock: { alignItems: 'center', paddingHorizontal: 10 },
   userStatNum: { fontSize: 18, fontWeight: '700' as const, color: ACCENT },
   userStatLabel: { fontSize: 10, color: SLATE, fontWeight: '500' as const },
+
+  userDraftsSection: { borderTopWidth: 1, borderTopColor: '#F1F5F9', padding: 14, backgroundColor: '#FAFBFC' },
+  userDraftsTitle: { fontSize: 13, fontWeight: '600' as const, color: DARK, marginBottom: 10 },
+  userDraftsEmpty: { fontSize: 13, color: '#94A3B8', textAlign: 'center', paddingVertical: 16 },
+  userDraftRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  userDraftName: { fontSize: 13, fontWeight: '500' as const, color: DARK, marginBottom: 1 },
+  userDraftMeta: { fontSize: 11, color: '#94A3B8' },
+  userDraftViewBtn: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#1B6EF30A', alignItems: 'center', justifyContent: 'center' },
 
   loaderBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 100, gap: 16 },
   loaderTxt: { fontSize: 14, color: SLATE },

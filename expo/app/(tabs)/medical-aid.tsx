@@ -901,16 +901,18 @@ export default function MedicalAidFormScreen() {
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
-        `Location: ${updatedFormData.radiographerSignatureLocation}\n\n` +
+        (updatedFormData.submissionLatitude && updatedFormData.submissionLongitude
+          ? `Location: ${updatedFormData.radiographerSignatureLocation} — https://maps.google.com/?q=${updatedFormData.submissionLatitude},${updatedFormData.submissionLongitude}\n\n`
+          : `Location: ${updatedFormData.radiographerSignatureLocation}\n\n`) +
         `--- Photo GPS Locations ---\n` +
         (updatedFormData.hospitalStickerPhotoMetadata?.latitude != null
-          ? `Hospital Sticker Photo: ${updatedFormData.hospitalStickerPhotoMetadata.latitude}, ${updatedFormData.hospitalStickerPhotoMetadata.longitude} (${updatedFormData.hospitalStickerPhotoMetadata.timestamp})\n`
+          ? `Hospital Sticker Photo: https://maps.google.com/?q=${updatedFormData.hospitalStickerPhotoMetadata.latitude},${updatedFormData.hospitalStickerPhotoMetadata.longitude} (${updatedFormData.hospitalStickerPhotoMetadata.timestamp})\n`
           : updatedFormData.hospitalStickerPhoto ? `Hospital Sticker Photo: No GPS data\n` : '') +
         (updatedFormData.timeInTheatrePhotoMetadata?.latitude != null
-          ? `Time In Theatre Photo: ${updatedFormData.timeInTheatrePhotoMetadata.latitude}, ${updatedFormData.timeInTheatrePhotoMetadata.longitude} (${updatedFormData.timeInTheatrePhotoMetadata.timestamp})\n`
+          ? `Time In Theatre Photo: https://maps.google.com/?q=${updatedFormData.timeInTheatrePhotoMetadata.latitude},${updatedFormData.timeInTheatrePhotoMetadata.longitude} (${updatedFormData.timeInTheatrePhotoMetadata.timestamp})\n`
           : updatedFormData.timeInTheatrePhoto ? `Time In Theatre Photo: No GPS data\n` : '') +
         (updatedFormData.timeOutTheatrePhotoMetadata?.latitude != null
-          ? `Time Out Theatre Photo: ${updatedFormData.timeOutTheatrePhotoMetadata.latitude}, ${updatedFormData.timeOutTheatrePhotoMetadata.longitude} (${updatedFormData.timeOutTheatrePhotoMetadata.timestamp})\n`
+          ? `Time Out Theatre Photo: https://maps.google.com/?q=${updatedFormData.timeOutTheatrePhotoMetadata.latitude},${updatedFormData.timeOutTheatrePhotoMetadata.longitude} (${updatedFormData.timeOutTheatrePhotoMetadata.timestamp})\n`
           : updatedFormData.timeOutTheatrePhoto ? `Time Out Theatre Photo: No GPS data\n` : '');
 
       try {
@@ -1501,7 +1503,7 @@ export default function MedicalAidFormScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Contrast Usage *</Text>
             <View style={styles.titleContainer}>
-              {['Supplied by Hospital', 'Supplied by External'].map((option) => (
+              {['Supplied by Hospital', 'Supplied by External', 'No Contrast'].map((option) => (
                 <TouchableOpacity
                   key={option}
                   style={[

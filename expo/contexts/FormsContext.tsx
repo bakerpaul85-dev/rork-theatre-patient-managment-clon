@@ -787,34 +787,41 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     const allFormIds = formIds.includes(id) ? formIds : [...formIds, id];
     await updateFormIndex(allFormIds);
 
-    const updatedForms = forms.map(form => {
-      if (form.id !== id) return form;
-      return {
-        ...form,
-        ...formData,
-        status: 'submitted' as const,
-        caseStatus: newCaseStatus,
-        caseStatusHistory: updatedHistory,
-        updatedAt: now,
-        submittedBy: username || existingForm.submittedBy,
-        submissionLatitude: location?.latitude,
-        submissionLongitude: location?.longitude,
-        hospitalStickerPhoto: null,
-        timeInTheatrePhoto: null,
-        timeOutTheatrePhoto: null,
-        timeInTheatreClockPhoto: null,
-        timeOutTheatreClockPhoto: null,
-        screeningTimePhoto: null,
-        firstMedicalReportPhoto: null,
-        patientIdPhoto: null,
-        referralLetterPhoto: null,
-        cArmImages: [],
-        employerReportPhotos: [],
-        attachmentPhotos: [],
-        referralLetterPages: [],
-      } as FormData;
+    const makeSubmittedForm = (base: any): FormData => ({
+      ...base,
+      ...formData,
+      status: 'submitted' as const,
+      caseStatus: newCaseStatus,
+      caseStatusHistory: updatedHistory,
+      updatedAt: now,
+      submittedBy: username || existingForm.submittedBy,
+      submissionLatitude: location?.latitude,
+      submissionLongitude: location?.longitude,
+      hospitalStickerPhoto: null,
+      timeInTheatrePhoto: null,
+      timeOutTheatrePhoto: null,
+      timeInTheatreClockPhoto: null,
+      timeOutTheatreClockPhoto: null,
+      screeningTimePhoto: null,
+      firstMedicalReportPhoto: null,
+      patientIdPhoto: null,
+      referralLetterPhoto: null,
+      cArmImages: [],
+      employerReportPhotos: [],
+      attachmentPhotos: [],
+      referralLetterPages: [],
+    } as FormData);
+
+    setForms(prevForms => {
+      const formExists = prevForms.some(f => f.id === id);
+      if (!formExists) {
+        const storedBase = { ...existingForm, id };
+        return [...prevForms, makeSubmittedForm(storedBase)];
+      }
+      return prevForms.map(form =>
+        form.id === id ? makeSubmittedForm(form) : form
+      );
     });
-    setForms(updatedForms);
     
     console.log('Form saved successfully with submitted status');
     

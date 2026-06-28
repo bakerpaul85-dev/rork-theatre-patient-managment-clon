@@ -32,7 +32,9 @@ function buildMedicalAidEmail(form: FormData): { subject: string; body: string; 
     `${form.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${form.reasonForTimeDiscrepancy}\n` : ''}` +
     `\nRadiographer: ${form.radiographerName || ''}\n` +
     `Signed: ${form.radiographerSignatureTimestamp ? new Date(form.radiographerSignatureTimestamp).toLocaleString() : 'N/A'}\n` +
-    `Location: ${form.radiographerSignatureLocation || ''}\n` +
+    ((form as any).submissionLatitude && (form as any).submissionLongitude
+      ? `Location: ${form.radiographerSignatureLocation || ''} — https://maps.google.com/?q=${(form as any).submissionLatitude},${(form as any).submissionLongitude}\n`
+      : `Location: ${form.radiographerSignatureLocation || ''}\n`) +
     `\nOriginally submitted: ${form.updatedAt ? new Date(form.updatedAt).toLocaleString() : 'N/A'}\n` +
     `Submitted by: ${form.submittedBy || 'N/A'}\n`;
 
@@ -72,7 +74,9 @@ function buildCOIDAEmail(form: FormData): { subject: string; body: string; recip
     `${coidaForm.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${coidaForm.reasonForTimeDiscrepancy}\n` : ''}` +
     `\nRadiographer: ${form.radiographerName || ''}\n` +
     `Signed: ${form.radiographerSignatureTimestamp ? new Date(form.radiographerSignatureTimestamp).toLocaleString() : 'N/A'}\n` +
-    `Location: ${form.radiographerSignatureLocation || ''}\n` +
+    ((form as any).submissionLatitude && (form as any).submissionLongitude
+      ? `Location: ${form.radiographerSignatureLocation || ''} — https://maps.google.com/?q=${(form as any).submissionLatitude},${(form as any).submissionLongitude}\n`
+      : `Location: ${form.radiographerSignatureLocation || ''}\n`) +
     `\nOriginally submitted: ${form.updatedAt ? new Date(form.updatedAt).toLocaleString() : 'N/A'}\n` +
     `Submitted by: ${form.submittedBy || 'N/A'}\n`;
 
