@@ -4,7 +4,7 @@ import { Platform, Alert } from 'react-native';
 import { FormData } from '@/contexts/FormsContext';
 import { readPhoto } from '@/utils/photoStorage';
 
-function buildMedicalAidEmail(form: FormData): { subject: string; body: string; recipients: string[] } {
+export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]): { subject: string; body: string; recipients: string[] } {
   const patientName = `${form.patientTitle || ''} ${form.patientFirstName || ''} ${form.patientLastName || ''}`.trim();
   const subject = `Medical Aid Form - ${patientName}`;
   const body =
@@ -45,11 +45,11 @@ function buildMedicalAidEmail(form: FormData): { subject: string; body: string; 
   return {
     subject,
     body,
-    recipients: ['paul@intouchmedtech.co.za', 'jenny@centaurimedical.co.za', 'kevin@centaurimedical.co.za'],
+    recipients: customRecipients || ['paul@intouchmedtech.co.za', 'jenny@centaurimedical.co.za', 'kevin@centaurimedical.co.za'],
   };
 }
 
-function buildCOIDAEmail(form: FormData): { subject: string; body: string; recipients: string[] } {
+export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { subject: string; body: string; recipients: string[] } {
   const patientName = `${form.patientTitle || ''} ${form.patientFirstName || ''} ${form.patientLastName || ''}`.trim();
   const coidaForm = form as any;
   const proceduresList = Array.isArray(coidaForm.procedure)
@@ -87,7 +87,7 @@ function buildCOIDAEmail(form: FormData): { subject: string; body: string; recip
   return {
     subject,
     body,
-    recipients: ['paul@intouchmedtech.co.za', 'nokuthula@debttec.co.za', 'allan@medimarketing100.co.za'],
+    recipients: customRecipients || ['paul@intouchmedtech.co.za', 'nokuthula@debttec.co.za', 'allan@medimarketing100.co.za'],
   };
 }
 
@@ -194,12 +194,12 @@ async function loadPhotosForForm(form: FormData): Promise<Array<{ base64Uri: str
   return photos;
 }
 
-export async function resendFormEmail(form: FormData): Promise<void> {
+export async function resendFormEmail(form: FormData, customRecipients?: string[]): Promise<void> {
   console.log('[resendEmail] Resending email for form:', form.id, 'type:', form.formType);
 
   const { subject, body, recipients } = form.formType === 'coida'
-    ? buildCOIDAEmail(form)
-    : buildMedicalAidEmail(form);
+    ? buildCOIDAEmail(form, customRecipients)
+    : buildMedicalAidEmail(form, customRecipients);
 
   const photos = await loadPhotosForForm(form);
 
@@ -255,4 +255,113 @@ export async function resendFormEmail(form: FormData): Promise<void> {
     attachments,
   });
   console.log('[resendEmail] Mail composer result:', mailResult.status);
+}
+
+export async function forwardUserForms(
+  forms: FormData[],
+  userIdentifier: string,
+  targetEmail: string = 'paul@intouchmedtech.co.za',
+): Promise<{ sent: number; skipped: number }> {
+  console.log(`[forwardUserForms] Forwarding ${forms.length} forms for user "${userIdentifier}" to ${targetEmail}`);
+
+  const submittedForms = forms.filter(f => f.status === 'submitted');
+  if (submittedForms.length === 0) {
+    Alert.alert('No Submitted Forms', `User "${userIdentifier}" has no submitted forms to forward.`);
+    return { sent: 0, skipped: forms.length };
+  }
+
+  if (Platform.OS === 'web') {
+    // On web, combine all forms into a single email
+    const subject = `[Forwarded] All submitted forms for ${userIdentifier}`;
+    let body = `Forwarded Forms for ${userIdentifier}\n`;
+    body += `Total forms: ${submittedForms.length}\n`;
+    body += `${'='.repeat(50)}\n\n`;
+
+    for (let i = 0; i < submittedForms.length; i++) {
+      const f = submittedForms[i];
+      const { body: formBody } = f.formType === 'coida'
+        ? buildCOIDAEmail(f)
+        : buildMedicalAidEmail(f);
+      body += `--- Form ${i + 1} of ${submittedForms.length} ---\n`;
+      body += formBody;
+      body += `\n${'='.repeat(50)}\n\n`;
+    }
+
+    const mailtoUrl = `mailto:${encodeURIComponent(targetEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailtoUrl, '_blank');
+    console.log('[forwardUserForms] Opened combined mailto on web');
+    Alert.alert('Forwarding', `Opening email with ${submittedForms.length} form(s) for ${userIdentifier} to ${targetEmail}.`);
+    return { sent: submittedForms.length, skipped: 0 };
+  }
+
+  // On native, open MailComposer for each form sequentially
+  const isAvailable = await MailComposer.isAvailableAsync();
+  if (!isAvailable) {
+    Alert.alert(
+      'Mail Not Available',
+      'No email client is configured on this device. Please set up an email account in your device settings.'
+    );
+    return { sent: 0, skipped: submittedForms.length };
+  }
+
+  let sent = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < submittedForms.length; i++) {
+    const form = submittedForms[i];
+    try {
+      console.log(`[forwardUserForms] Forwarding form ${i + 1}/${submittedForms.length}: ${form.id}`);
+
+      const { subject, body } = form.formType === 'coida'
+        ? buildCOIDAEmail(form, [targetEmail])
+        : buildMedicalAidEmail(form, [targetEmail]);
+
+      const photos = await loadPhotosForForm(form);
+      const attachments: string[] = [];
+
+      if (photos.length > 0) {
+        const tempDir = `${(FileSystem as any).cacheDirectory || ''}forward_attachments/`;
+        try {
+          await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
+        } catch {}
+
+        for (const photo of photos) {
+          try {
+            const base64Data = photo.base64Uri.replace(/^data:[^;]+;base64,/, '');
+            const filePath = `${tempDir}${photo.filename}`;
+            await FileSystem.writeAsStringAsync(filePath, base64Data, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            attachments.push(filePath);
+          } catch (err) {
+            console.error('[forwardUserForms] Failed to save attachment:', photo.filename, err);
+          }
+        }
+      }
+
+      const mailResult = await MailComposer.composeAsync({
+        recipients: [targetEmail],
+        subject: `[Forwarded: ${userIdentifier}] ${subject}`,
+        body,
+        attachments,
+      });
+
+      if (mailResult.status === 'sent') {
+        sent++;
+      } else {
+        skipped++;
+        console.log(`[forwardUserForms] Form ${form.id} not sent, status: ${mailResult.status}`);
+      }
+    } catch (err) {
+      skipped++;
+      console.error(`[forwardUserForms] Error forwarding form ${form.id}:`, err);
+    }
+  }
+
+  const message = sent > 0
+    ? `Forwarded ${sent} form(s) for ${userIdentifier} to ${targetEmail}.${skipped > 0 ? ` ${skipped} skipped.` : ''}`
+    : `No forms were forwarded for ${userIdentifier}.`;
+  Alert.alert('Forwarding Complete', message);
+  console.log(`[forwardUserForms] Done: ${sent} sent, ${skipped} skipped`);
+  return { sent, skipped };
 }

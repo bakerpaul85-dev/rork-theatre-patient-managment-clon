@@ -11,12 +11,13 @@ import {
   Mail, User, Briefcase, Hash,
   X, Eye, BarChart3, LogIn, Lock, Shield,
   Activity, TrendingUp, LogOut, ChevronRight,
+  Send,
 } from 'lucide-react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useCloudSync } from '@/contexts/CloudSyncContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { FormData } from '@/contexts/FormsContext';
-import { ADMIN_EMAILS } from '@/contexts/CloudSyncContext';
+import { forwardUserForms } from '@/utils/resendEmail';
 
 type TabKey = 'dashboard' | 'forms' | 'users';
 type SortField = 'updatedAt' | 'patientLastName' | 'radiographerName' | 'formType';
@@ -223,6 +224,25 @@ export default function PortalScreen() {
     if (isNaN(d.getTime())) return '—';
     return d.toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }, []);
+
+  const [forwardingUserId, setForwardingUserId] = useState<string | null>(null);
+
+  const handleForwardUserForms = useCallback(async (userIdentifier: string) => {
+    const userForms = cloudForms.filter(f => {
+      const email = (f as any).userEmail ?? f.submittedBy ?? '';
+      return (email as string).toLowerCase() === userIdentifier.toLowerCase();
+    });
+    if (userForms.length === 0) {
+      Alert.alert('No Forms', `No forms found for user "${userIdentifier}".`);
+      return;
+    }
+    setForwardingUserId(userIdentifier);
+    try {
+      await forwardUserForms(userForms, userIdentifier);
+    } finally {
+      setForwardingUserId(null);
+    }
+  }, [cloudForms]);
 
   const handleExportCSV = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -761,6 +781,8 @@ export default function PortalScreen() {
         const submitted = userForms.filter(f => f.status === 'submitted').length;
         const drafts = userForms.filter(f => f.status === 'draft');
         const expanded = expandedUserId === u.id;
+        const userEmail = (u.email || '').toLowerCase();
+        const isForwarding = forwardingUserId === userEmail;
         return (
           <View key={u.id ?? i} style={[s.userCard, expanded && s.userCardExpanded]}>
             <TouchableOpacity
@@ -790,6 +812,23 @@ export default function PortalScreen() {
                 <Text style={[s.userStatNum, { color: AMBER }]}>{drafts.length}</Text>
                 <Text style={s.userStatLabel}>drafts</Text>
               </View>
+              {submitted > 0 && (
+                <TouchableOpacity
+                  style={[s.forwardBtn, isForwarding && { opacity: 0.6 }]}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    if (!isForwarding) handleForwardUserForms(userEmail);
+                  }}
+                  disabled={isForwarding}
+                  activeOpacity={0.7}
+                >
+                  {isForwarding ? (
+                    <ActivityIndicator size="small" color={ACCENT} />
+                  ) : (
+                    <Send size={14} color={ACCENT} />
+                  )}
+                </TouchableOpacity>
+              )}
               {expanded ? <ChevronUp size={16} color={SLATE} /> : <ChevronDown size={16} color={SLATE} />}
             </TouchableOpacity>
             {expanded && (
@@ -983,6 +1022,7 @@ const s = StyleSheet.create({
   userStatBlock: { alignItems: 'center', paddingHorizontal: 10 },
   userStatNum: { fontSize: 18, fontWeight: '700' as const, color: ACCENT },
   userStatLabel: { fontSize: 10, color: SLATE, fontWeight: '500' as const },
+  forwardBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#1B6EF30A', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
 
   userDraftsSection: { borderTopWidth: 1, borderTopColor: '#F1F5F9', padding: 14, backgroundColor: '#FAFBFC' },
   userDraftsTitle: { fontSize: 13, fontWeight: '600' as const, color: DARK, marginBottom: 10 },
