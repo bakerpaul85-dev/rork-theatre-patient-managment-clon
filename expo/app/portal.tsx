@@ -759,7 +759,14 @@ export default function PortalScreen() {
   );
 
   const renderUsers = () => {
-    const getUserForms = (u: CloudUser) => cloudForms.filter(f => (f as any).userEmail === u.email || (f as any).uid === u.uid);
+    const getUserForms = (u: CloudUser) => {
+      const uEmail = (u.email || '').toLowerCase();
+      return cloudForms.filter(f => {
+        const fEmail = ((f as any).userEmail || '').toLowerCase();
+        const fUid = ((f as any).uid || '').toLowerCase();
+        return fEmail === uEmail || fUid === uEmail;
+      });
+    };
     return (
     <>
       <View style={s.pageHeader}>
@@ -783,54 +790,65 @@ export default function PortalScreen() {
         const expanded = expandedUserId === u.id;
         const userEmail = (u.email || '').toLowerCase();
         const isForwarding = forwardingUserId === userEmail;
+        const canForward = submitted > 0;
         return (
           <View key={u.id ?? i} style={[s.userCard, expanded && s.userCardExpanded]}>
-            <TouchableOpacity
-              style={s.userCardMain}
-              onPress={() => setExpandedUserId(expanded ? null : (u.id ?? null))}
-              activeOpacity={0.7}
-            >
-              <View style={s.userAvatar}>
-                <Text style={s.userAvatarTxt}>{initials}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.userCardName}>{u.name || 'Unnamed'}</Text>
-                <View style={s.userMetaRow}>
-                  <Mail size={12} color="#94A3B8" />
-                  <Text style={s.userCardEmail}>{u.email ?? '—'}</Text>
+            <View style={s.userCardMain}>
+              <TouchableOpacity
+                style={{ flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 }}
+                onPress={() => setExpandedUserId(expanded ? null : (u.id ?? null))}
+                activeOpacity={0.7}
+              >
+                <View style={s.userAvatar}>
+                  <Text style={s.userAvatarTxt}>{initials}</Text>
                 </View>
-              </View>
-              <View style={s.userStatBlock}>
-                <Text style={s.userStatNum}>{userForms.length}</Text>
-                <Text style={s.userStatLabel}>forms</Text>
-              </View>
-              <View style={s.userStatBlock}>
-                <Text style={[s.userStatNum, { color: GREEN }]}>{submitted}</Text>
-                <Text style={s.userStatLabel}>sent</Text>
-              </View>
-              <View style={[s.userStatBlock, { minWidth: 50 }]}>
-                <Text style={[s.userStatNum, { color: AMBER }]}>{drafts.length}</Text>
-                <Text style={s.userStatLabel}>drafts</Text>
-              </View>
-              {submitted > 0 && (
+                <View style={{ flex: 1 }}>
+                  <Text style={s.userCardName}>{u.name || 'Unnamed'}</Text>
+                  <View style={s.userMetaRow}>
+                    <Mail size={12} color="#94A3B8" />
+                    <Text style={s.userCardEmail}>{u.email ?? '—'}</Text>
+                  </View>
+                </View>
+                <View style={s.userStatBlock}>
+                  <Text style={s.userStatNum}>{userForms.length}</Text>
+                  <Text style={s.userStatLabel}>forms</Text>
+                </View>
+                <View style={s.userStatBlock}>
+                  <Text style={[s.userStatNum, { color: GREEN }]}>{submitted}</Text>
+                  <Text style={s.userStatLabel}>sent</Text>
+                </View>
+                <View style={[s.userStatBlock, { minWidth: 50 }]}>
+                  <Text style={[s.userStatNum, { color: AMBER }]}>{drafts.length}</Text>
+                  <Text style={s.userStatLabel}>drafts</Text>
+                </View>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 }}>
                 <TouchableOpacity
-                  style={[s.forwardBtn, isForwarding && { opacity: 0.6 }]}
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    if (!isForwarding) handleForwardUserForms(userEmail);
+                  style={[s.forwardBtn, !canForward && s.forwardBtnDisabled, isForwarding && { opacity: 0.6 }]}
+                  onPress={() => {
+                    if (canForward && !isForwarding) handleForwardUserForms(userEmail);
                   }}
-                  disabled={isForwarding}
+                  disabled={!canForward || isForwarding}
                   activeOpacity={0.7}
                 >
                   {isForwarding ? (
                     <ActivityIndicator size="small" color={ACCENT} />
                   ) : (
-                    <Send size={14} color={ACCENT} />
+                    <>
+                      <Send size={13} color={canForward ? ACCENT : '#CBD5E1'} />
+                      <Text style={[s.forwardBtnTxt, !canForward && { color: '#CBD5E1' }]}>Forward</Text>
+                    </>
                   )}
                 </TouchableOpacity>
-              )}
-              {expanded ? <ChevronUp size={16} color={SLATE} /> : <ChevronDown size={16} color={SLATE} />}
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.expandBtn}
+                  onPress={() => setExpandedUserId(expanded ? null : (u.id ?? null))}
+                  activeOpacity={0.7}
+                >
+                  {expanded ? <ChevronUp size={16} color={SLATE} /> : <ChevronDown size={16} color={SLATE} />}
+                </TouchableOpacity>
+              </View>
+            </View>
             {expanded && (
               <View style={s.userDraftsSection}>
                 <Text style={s.userDraftsTitle}>Drafts ({drafts.length})</Text>
@@ -1022,7 +1040,10 @@ const s = StyleSheet.create({
   userStatBlock: { alignItems: 'center', paddingHorizontal: 10 },
   userStatNum: { fontSize: 18, fontWeight: '700' as const, color: ACCENT },
   userStatLabel: { fontSize: 10, color: SLATE, fontWeight: '500' as const },
-  forwardBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#1B6EF30A', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  forwardBtn: { flexDirection: 'row' as const, height: 34, borderRadius: 8, backgroundColor: '#1B6EF30A', alignItems: 'center' as const, justifyContent: 'center' as const, paddingHorizontal: 10, gap: 6 },
+  forwardBtnTxt: { fontSize: 12, fontWeight: '600' as const, color: ACCENT },
+  forwardBtnDisabled: { backgroundColor: '#F1F5F9' },
+  expandBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#F8FAFC', alignItems: 'center' as const, justifyContent: 'center' as const },
 
   userDraftsSection: { borderTopWidth: 1, borderTopColor: '#F1F5F9', padding: 14, backgroundColor: '#FAFBFC' },
   userDraftsTitle: { fontSize: 13, fontWeight: '600' as const, color: DARK, marginBottom: 10 },
