@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform, Alert } from 'react-native';
 import { FormData } from '@/contexts/FormsContext';
 import { readPhoto } from '@/utils/photoStorage';
+import { trpcClient } from '@/lib/trpc';
 
 function buildMedicalAidEmail(form: FormData): { subject: string; body: string; recipients: string[] } {
   const patientName = `${form.patientTitle || ''} ${form.patientFirstName || ''} ${form.patientLastName || ''}`.trim();
@@ -15,7 +16,6 @@ function buildMedicalAidEmail(form: FormData): { subject: string; body: string; 
     `Contact: ${form.contactNumber || ''}\n` +
     `Email: ${form.email || ''}\n\n` +
     `Hospital/Service Provider: ${form.hospitalServiceProvider || ''}\n` +
-    `Ward/Theatre: ${form.ward || ''}\n` +
     `Referring Doctor: ${form.referringDoctor || ''}\n` +
     `Doctor Practice Number: ${form.doctorPracticeNumber || ''}\n\n` +
     `Main Member: ${form.mainMemberTitle || ''} ${form.mainMemberFirstName || ''} ${form.mainMemberLastName || ''}\n` +
@@ -26,9 +26,14 @@ function buildMedicalAidEmail(form: FormData): { subject: string; body: string; 
     `Dependant Code: ${form.dependantCode || ''}\n\n` +
     `Procedure: ${form.procedure || ''}\n` +
     `ICD10 Code: ${form.icd10Code || ''}\n\n` +
+    `Number of Sessions: ${((form as any).numberOfSessions) || ''}\n` +
+    `C-Arm Owned by Hospital: ${((form as any).cArmOwnedByHospital) || ''}\n` +
+    `Contrast Usage: ${((form as any).contrastUsage) || ''}\n` +
+    ((form as any).contrastName ? `Contrast Name: ${(form as any).contrastName}\n` : '') +
+    ((form as any).contrastAmount ? `Contrast Amount: ${(form as any).contrastAmount}\n` : '') +
     `Time C Arm In: ${form.timeCArmTakenIn || ''}\n` +
     `Time C Arm Out: ${form.timeCArmTakenOut || ''}\n` +
-    `Screening Time: ${form.screeningTimeText || ''}\n` +
+    `Screening Time: ${((): string => { const t = String(form.screeningTimeText ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
     `${form.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${form.reasonForTimeDiscrepancy}\n` : ''}` +
     `\nRadiographer: ${form.radiographerName || ''}\n` +
     `Signed: ${form.radiographerSignatureTimestamp ? new Date(form.radiographerSignatureTimestamp).toLocaleString() : 'N/A'}\n` +
@@ -70,7 +75,7 @@ function buildCOIDAEmail(form: FormData): { subject: string; body: string; recip
     `Date of Procedure: ${coidaForm.dateOfProcedure || ''}\n\n` +
     `Time In Theatre: ${coidaForm.timeInTheatre || ''}\n` +
     `Time Out Theatre: ${coidaForm.timeOutTheatre || ''}\n` +
-    `Fluoroscopy Time: ${coidaForm.fluoroscopyTime || ''}s\n` +
+    `Fluoroscopy Time: ${((): string => { const t = String(coidaForm.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
     `${coidaForm.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${coidaForm.reasonForTimeDiscrepancy}\n` : ''}` +
     `\nRadiographer: ${form.radiographerName || ''}\n` +
     `Signed: ${form.radiographerSignatureTimestamp ? new Date(form.radiographerSignatureTimestamp).toLocaleString() : 'N/A'}\n` +
@@ -199,18 +204,38 @@ export async function resendFormEmail(form: FormData): Promise<void> {
 
   const photos = await loadPhotosForForm(form);
 
+  // --- Primary: Send via Resend API through tRPC backend (reliable delivery) ---
+  let resendSuccess = false;
+  try {
+    const photoAttachments: Array<{ filename: string; content: string; contentType: string }> = photos.map(p => ({
+      filename: p.filename,
+      content: p.base64Uri.replace(/^data:[^;]+;base64,/, ''),
+      contentType: 'image/jpeg',
+    }));
+
+    await trpcClient.email.sendForm.mutate({
+      form: form as any,
+      attachments: photoAttachments,
+    });
+    resendSuccess = true;
+    console.log('[resendEmail] Email sent via Resend API successfully');
+  } catch (resendErr) {
+    console.error('[resendEmail] Resend API failed:', resendErr);
+  }
+
+  // --- Fallback/Complement: Open native MailComposer ---
+  // On web, use mailto fallback
   if (Platform.OS === 'web') {
     const mailtoRecipients = recipients.join(',');
     const mailtoSubject = encodeURIComponent(subject);
     const mailtoBody = encodeURIComponent(body);
     const mailtoUrl = `mailto:${mailtoRecipients}?subject=${mailtoSubject}&body=${mailtoBody}`;
     window.open(mailtoUrl, '_blank');
-    console.log('[resendEmail] Opened mailto link on web (photos cannot be attached via mailto)');
-    if (photos.length > 0) {
-      Alert.alert(
-        'Note',
-        `${photos.length} photo(s) are available but cannot be attached via web mailto. Please use a mobile device to resend with photos.`
-      );
+    console.log('[resendEmail] Opened mailto link on web');
+    if (resendSuccess) {
+      Alert.alert('Success', 'Email has been resent via our delivery service.');
+    } else {
+      Alert.alert('Warning', 'Email delivery may have failed. Please try again or contact support.');
     }
     return;
   }
@@ -218,10 +243,14 @@ export async function resendFormEmail(form: FormData): Promise<void> {
   const isAvailable = await MailComposer.isAvailableAsync();
   if (!isAvailable) {
     console.log('[resendEmail] Mail composer not available');
-    Alert.alert(
-      'Mail Not Available',
-      'No email client is configured on this device. Please set up an email account in your device settings and try again.'
-    );
+    if (!resendSuccess) {
+      Alert.alert(
+        'Mail Not Available',
+        'No email client is configured on this device and our email service is unavailable. Please try again later.'
+      );
+    } else {
+      Alert.alert('Success', 'Email has been resent via our delivery service.');
+    }
     return;
   }
 
@@ -249,11 +278,17 @@ export async function resendFormEmail(form: FormData): Promise<void> {
   }
 
   console.log(`[resendEmail] Opening mail composer with ${attachments.length} attachments...`);
-  await MailComposer.composeAsync({
+  const mailResult = await MailComposer.composeAsync({
     recipients,
     subject,
     body,
     attachments,
   });
-  console.log('[resendEmail] Mail composer closed');
+  console.log('[resendEmail] Mail composer result:', mailResult.status);
+
+  if (resendSuccess) {
+    Alert.alert('Success', 'Email has been resent successfully.');
+  } else {
+    Alert.alert('Warning', 'Email delivery may have failed. Please check your internet connection and try again.');
+  }
 }

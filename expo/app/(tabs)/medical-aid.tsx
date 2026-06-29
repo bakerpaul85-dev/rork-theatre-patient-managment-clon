@@ -23,6 +23,7 @@ import { PROCEDURE_OPTIONS } from '@/constants/procedures';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
+import { trpc } from '@/lib/trpc';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
@@ -425,6 +426,7 @@ const dropdownStyles = StyleSheet.create({
 export default function MedicalAidFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm } = useForms();
+  const sendEmailMutation = trpc.email.sendForm.useMutation();
   const router = useRouter();
   const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_medicalAid?: string; wl_medicalAidPlan?: string; wl_membershipNumber?: string; wl_dependantCode?: string; wl_dateOfProcedure?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_hospital?: string; wl_fromWorklist?: string; wl_atRecordId?: string; wl_atBaseId?: string; wl_atTableId?: string }>();
   const isFromWorklist = params.wl_fromWorklist === 'true';
@@ -987,20 +989,57 @@ export default function MedicalAidFormScreen() {
         }
 
         console.log('Mail attachments count:', attachments.length);
+
+        // Try Resend API as primary reliable delivery method
+        let resendSuccess = false;
+        try {
+          const photoAttachments = [];
+          if (updatedFormData.hospitalStickerPhoto) {
+            const b64 = updatedFormData.hospitalStickerPhoto.replace(/^data:[^;]+;base64,/, '');
+            photoAttachments.push({ filename: 'hospital_sticker.jpg', content: b64, contentType: 'image/jpeg' });
+          }
+          if (updatedFormData.timeInTheatrePhoto) {
+            const b64 = updatedFormData.timeInTheatrePhoto.replace(/^data:[^;]+;base64,/, '');
+            photoAttachments.push({ filename: 'clock_in_theatre.jpg', content: b64, contentType: 'image/jpeg' });
+          }
+          if (updatedFormData.timeOutTheatrePhoto) {
+            const b64 = updatedFormData.timeOutTheatrePhoto.replace(/^data:[^;]+;base64,/, '');
+            photoAttachments.push({ filename: 'clock_out_theatre.jpg', content: b64, contentType: 'image/jpeg' });
+          }
+
+          await sendEmailMutation.mutateAsync({
+            form: updatedFormData as any,
+            attachments: photoAttachments,
+          });
+          resendSuccess = true;
+          console.log('Email sent via Resend API successfully');
+        } catch (resendErr) {
+          console.error('Resend API failed:', resendErr);
+        }
+
+        // Also open native MailComposer as backup/visual confirmation
         const isAvailable = await MailComposer.isAvailableAsync();
         if (isAvailable) {
-          await MailComposer.composeAsync({
+          const mailResult = await MailComposer.composeAsync({
             recipients: ['paul@intouchmedtech.co.za', 'jenny@centaurimedical.co.za', 'kevin@centaurimedical.co.za'],
             subject,
             body,
             attachments,
           });
+          console.log('Mail composer result:', mailResult.status);
         } else {
           console.log('Mail composer not available on this device');
         }
-        Alert.alert('Success', 'Medical Aid form completed successfully!', [
-          { text: 'OK', onPress: () => router.push('/') },
-        ]);
+
+        if (resendSuccess) {
+          Alert.alert('Success', 'Medical Aid form submitted successfully! Email has been sent.', [
+            { text: 'OK', onPress: () => router.push('/') },
+          ]);
+        } else {
+          Alert.alert('Form Saved', 'Medical Aid form was saved but email delivery may have failed. Check your forms list to resend.', [
+            { text: 'OK', onPress: () => router.push('/') },
+          ]);
+        }
       } catch (emailError) {
         console.error('Mail composer error:', emailError);
         Alert.alert(

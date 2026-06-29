@@ -7,7 +7,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { FormsProvider } from "@/contexts/FormsContext";
+import { FormsProvider, useForms } from "@/contexts/FormsContext";
 import { CloudSyncProvider, useCloudSync } from "@/contexts/CloudSyncContext";
 import { cloudSyncBridge } from "@/utils/cloudSyncBridge";
 
@@ -16,12 +16,35 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function CloudSyncBridgeWirer() {
-  const { syncFormToCloud, deleteFormFromCloud, isConfigured } = useCloudSync();
+  const { syncFormToCloud, deleteFormFromCloud, isConfigured, fetchAllFormsFromCloud } = useCloudSync();
+  const { mergeCloudForms } = useForms();
+  const { user } = useAuth();
+  const hasSyncedRef = React.useRef(false);
+
   useEffect(() => {
     if (!isConfigured) return;
     cloudSyncBridge.onSync((form) => { void syncFormToCloud(form); });
     cloudSyncBridge.onDelete((formId) => { void deleteFormFromCloud(formId); });
   }, [isConfigured, syncFormToCloud, deleteFormFromCloud]);
+
+  useEffect(() => {
+    if (!isConfigured || !user?.email || hasSyncedRef.current) return;
+    hasSyncedRef.current = true;
+    const doSync = async () => {
+      try {
+        console.log('[CloudSyncBridge] Fetching submitted forms from cloud...');
+        const cloudForms = await fetchAllFormsFromCloud();
+        if (cloudForms.length > 0) {
+          const merged = await mergeCloudForms(cloudForms, user.email);
+          console.log(`[CloudSyncBridge] Cloud sync complete — merged ${merged} forms`);
+        }
+      } catch (err) {
+        console.error('[CloudSyncBridge] Cloud sync error:', err);
+      }
+    };
+    void doSync();
+  }, [isConfigured, user?.email, fetchAllFormsFromCloud, mergeCloudForms]);
+
   return null;
 }
 

@@ -10,6 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { useForms, FormData } from '@/contexts/FormsContext';
+import { useCloudSync } from '@/contexts/CloudSyncContext';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { FileText, Clock, CheckCircle, Trash2, X, ChevronDown, RefreshCw, Mail } from 'lucide-react-native';
@@ -19,13 +20,15 @@ import CaseTracker from '@/components/CaseTracker';
 import { CaseStatus, getCaseStatusConfig } from '@/constants/caseStatus';
 
 export default function FormsListScreen() {
-  const { getDrafts, getSubmittedForms, deleteForm, updateCaseStatus, resubmitForm, getForm } = useForms();
+  const { getDrafts, getSubmittedForms, deleteForm, updateCaseStatus, resubmitForm, getForm, mergeCloudForms } = useForms();
+  const { fetchAllFormsFromCloud, isSyncing } = useCloudSync();
   const { user } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'drafts' | 'submitted'>('drafts');
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
   const [statusModalForm, setStatusModalForm] = useState<FormData | null>(null);
+  const [isResyncing, setIsResyncing] = useState(false);
 
   const drafts = getDrafts();
   const submittedForms = getSubmittedForms();
@@ -74,6 +77,21 @@ export default function FormsListScreen() {
       setResendingEmailId(null);
     }
   }, []);
+
+  const handleResync = useCallback(async () => {
+    if (!user?.email) return;
+    setIsResyncing(true);
+    try {
+      const cloudForms = await fetchAllFormsFromCloud();
+      if (cloudForms.length > 0) {
+        await mergeCloudForms(cloudForms, user.email);
+      }
+    } catch (err) {
+      console.error('[Forms] Resync error:', err);
+    } finally {
+      setIsResyncing(false);
+    }
+  }, [user, fetchAllFormsFromCloud, mergeCloudForms]);
 
   const handleCaseStatusChange = useCallback(async (formId: string, newStatus: CaseStatus) => {
     try {
@@ -217,6 +235,18 @@ export default function FormsListScreen() {
             Submitted ({submittedForms.length})
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.syncTab}
+          onPress={handleResync}
+          disabled={isResyncing || isSyncing}
+          testID="resync-cloud-btn"
+        >
+          <RefreshCw
+            size={18}
+            color="#0066CC"
+            style={isResyncing || isSyncing ? { transform: [{ rotate: '45deg' }] } : undefined}
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -322,6 +352,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E1E4E8',
+    alignItems: 'center',
+  },
+  syncTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tab: {
     flex: 1,

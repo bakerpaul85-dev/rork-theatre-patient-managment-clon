@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { generateClaimSpreadsheet } from '@/utils/excelGenerator';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
+import { trpc } from '@/lib/trpc';
 import DocumentScanner from '@/components/DocumentScanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -133,6 +134,7 @@ const PROCEDURE_OPTIONS = [
 export default function COIDAFormScreen() {
   const { user } = useAuth();
   const { saveDraft, updateDraft, submitForm, getForm, generateExcelExport } = useForms();
+  const sendEmailMutation = trpc.email.sendForm.useMutation();
   const router = useRouter();
   const params = useLocalSearchParams<{ formId?: string; wl_firstName?: string; wl_lastName?: string; wl_title?: string; wl_idNumber?: string; wl_dob?: string; wl_contact?: string; wl_email?: string; wl_procedure?: string; wl_icd10?: string; wl_dateOfProcedure?: string; wl_coidaNumber?: string; wl_iodClaim?: string; wl_employer?: string; wl_employerContact?: string; wl_dateOfIncident?: string; wl_mainMemberTitle?: string; wl_mainMemberFirstName?: string; wl_mainMemberLastName?: string; wl_mainMemberIdNumber?: string; wl_referringDoctor?: string; wl_doctorPracticeNumber?: string; wl_fromWorklist?: string; wl_atRecordId?: string; wl_atBaseId?: string; wl_atTableId?: string }>();
   const isFromWorklist = params.wl_fromWorklist === 'true';
@@ -1077,20 +1079,57 @@ export default function COIDAFormScreen() {
         }
 
         console.log('Mail attachments count:', attachments.length);
+
+        // Try Resend API as primary reliable delivery method
+        let resendSuccess = false;
+        try {
+          const photoAttachments: Array<{ filename: string; content: string; contentType: string }> = [];
+          const addPhoto = (key: string, uri: string | null | undefined, filename: string) => {
+            if (uri) {
+              const b64 = uri.replace(/^data:[^;]+;base64,/, '');
+              photoAttachments.push({ filename, content: b64, contentType: 'image/jpeg' });
+            }
+          };
+          addPhoto('', updatedFormData.hospitalStickerPhoto, 'hospital_sticker.jpg');
+          addPhoto('', updatedFormData.timeInTheatreClockPhoto, 'time_in_theatre_clock.jpg');
+          addPhoto('', updatedFormData.screeningTimePhoto, 'screening_time.jpg');
+          addPhoto('', updatedFormData.timeOutTheatreClockPhoto, 'time_out_theatre_clock.jpg');
+          addPhoto('', updatedFormData.firstMedicalReportPhoto, 'first_medical_report.jpg');
+          addPhoto('', updatedFormData.patientIdPhoto, 'patient_id.jpg');
+
+          await sendEmailMutation.mutateAsync({
+            form: updatedFormData as any,
+            attachments: photoAttachments,
+          });
+          resendSuccess = true;
+          console.log('Email sent via Resend API successfully');
+        } catch (resendErr) {
+          console.error('Resend API failed:', resendErr);
+        }
+
+        // Also open native MailComposer as backup/visual confirmation
         const isAvailable = await MailComposer.isAvailableAsync();
         if (isAvailable) {
-          await MailComposer.composeAsync({
+          const mailResult = await MailComposer.composeAsync({
             recipients: ['paul@intouchmedtech.co.za', 'nokuthula@debttec.co.za', 'allan@medimarketing100.co.za'],
             subject,
             body,
             attachments,
           });
+          console.log('Mail composer result:', mailResult.status);
         } else {
           console.log('Mail composer not available on this device');
         }
-        Alert.alert('Success', 'COIDA form completed successfully!', [
-          { text: 'OK', onPress: () => router.push('/(tabs)/' as any) },
-        ]);
+
+        if (resendSuccess) {
+          Alert.alert('Success', 'COIDA form submitted successfully! Email has been sent.', [
+            { text: 'OK', onPress: () => router.push('/(tabs)/' as any) },
+          ]);
+        } else {
+          Alert.alert('Form Saved', 'COIDA form was saved but email delivery may have failed. Check your forms list to resend.', [
+            { text: 'OK', onPress: () => router.push('/(tabs)/' as any) },
+          ]);
+        }
       } catch (emailError) {
         console.error('Mail composer error:', emailError);
         Alert.alert(

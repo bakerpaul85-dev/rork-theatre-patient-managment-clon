@@ -94,6 +94,7 @@ interface FormsContextValue {
   sharePDF: (form: FormData) => Promise<void>;
   updateCaseStatus: (id: string, caseStatus: CaseStatus, updatedBy?: string) => Promise<void>;
   resubmitForm: (id: string) => Promise<void>;
+  mergeCloudForms: (cloudForms: any[], userEmail: string) => Promise<number>;
 }
 
 const FORMS_INDEX_KEY = '@patient_forms_index';
@@ -972,6 +973,53 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     }
   }, [forms, saveForms]);
 
+  const mergeCloudForms = useCallback(async (cloudForms: any[], userEmail: string): Promise<number> => {
+    if (!cloudForms.length || !userEmail) return 0;
+    const normalizedEmail = (userEmail ?? '').toLowerCase().trim();
+    if (!normalizedEmail) return 0;
+
+    let indexData: string | null = null;
+    try {
+      indexData = await AsyncStorage.getItem(FORMS_INDEX_KEY);
+    } catch {}
+    const existingIds: string[] = indexData ? JSON.parse(indexData) : [];
+    const existingIdSet = new Set(existingIds);
+
+    const newForms: FormData[] = [];
+    const newIds: string[] = [];
+
+    for (const cloudForm of cloudForms) {
+      try {
+        if (!cloudForm?.id) continue;
+        if (existingIdSet.has(cloudForm.id)) continue;
+
+        const formEmail = ((cloudForm.userEmail || cloudForm.uid || cloudForm.submittedBy || '') as string).toLowerCase().trim();
+        if (formEmail !== normalizedEmail) continue;
+
+        if (cloudForm.status !== 'submitted') continue;
+
+        const sanitized = sanitizeFormForStorage(cloudForm);
+        await AsyncStorage.setItem(`${FORM_KEY_PREFIX}${sanitized.id}`, JSON.stringify(sanitized));
+        newIds.push(sanitized.id);
+        existingIdSet.add(sanitized.id);
+        newForms.push(sanitized as FormData);
+      } catch (err) {
+        console.error(`[FormsContext] Skipping cloud form ${cloudForm?.id}:`, err);
+      }
+    }
+
+    if (newForms.length === 0) return 0;
+
+    await updateFormIndex([...existingIds, ...newIds]);
+    setForms(prev => {
+      const prevIds = new Set(prev.map(f => f.id));
+      const trulyNew = newForms.filter(f => !prevIds.has(f.id));
+      return [...prev, ...trulyNew];
+    });
+    console.log(`[FormsContext] Merged ${newForms.length} submitted forms from cloud for ${normalizedEmail}`);
+    return newForms.length;
+  }, [updateFormIndex]);
+
   const sharePDF = useCallback(async (form: FormData) => {
     try {
       console.log('Starting PDF share process...');
@@ -1119,5 +1167,6 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
     sharePDF,
     updateCaseStatus,
     resubmitForm,
-  }), [forms, isLoading, saveDraft, updateDraft, submitForm, deleteForm, getForm, getDrafts, getSubmittedForms, generateExcelExport, sharePDF, updateCaseStatus, resubmitForm]);
+    mergeCloudForms,
+  }), [forms, isLoading, saveDraft, updateDraft, submitForm, deleteForm, getForm, getDrafts, getSubmittedForms, generateExcelExport, sharePDF, updateCaseStatus, resubmitForm, mergeCloudForms]);
 });
