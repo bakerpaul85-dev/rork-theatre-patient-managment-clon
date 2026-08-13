@@ -40,10 +40,23 @@ interface FormData {
   dateOfBirth: string;
   contactNumber: string;
   email: string;
+  gender: string;
+  patientAddress: string;
+  homePhone: string;
+  workPhone: string;
   hospitalServiceProvider: string;
+  ward: string;
+  bed: string;
+  admissionDate: string;
+  admissionTime: string;
+  caseNumber: string;
   referringDoctor: string;
   doctorPracticeNumber: string;
+  authorizationCode: string;
   numberOfSessions: string;
+  theatreTimeWitness: string;
+  fixedInstallation: string;
+  dap: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
@@ -476,10 +489,23 @@ export default function MedicalAidFormScreen() {
     dateOfBirth: '',
     contactNumber: '',
     email: '',
+    gender: '',
+    patientAddress: '',
+    homePhone: '',
+    workPhone: '',
     hospitalServiceProvider: '',
+    ward: '',
+    bed: '',
+    admissionDate: '',
+    admissionTime: '',
+    caseNumber: '',
     referringDoctor: '',
     doctorPracticeNumber: '',
+    authorizationCode: '',
     numberOfSessions: '',
+    theatreTimeWitness: '',
+    fixedInstallation: '',
+    dap: '',
     mainMemberTitle: 'Mr',
     mainMemberFirstName: '',
     mainMemberLastName: '',
@@ -678,7 +704,7 @@ export default function MedicalAidFormScreen() {
     return `${numericValue.substring(0, 2)}H${numericValue.substring(2, 4)}`;
   };
 
-  const handleTimeInput = (field: 'timeCArmTakenIn' | 'timeCArmTakenOut', value: string) => {
+  const handleTimeInput = (field: 'timeCArmTakenIn' | 'timeCArmTakenOut' | 'admissionTime', value: string) => {
     const formatted = formatTimeWithH(value);
     setFormData(prev => ({ ...prev, [field]: formatted }));
   };
@@ -779,7 +805,9 @@ export default function MedicalAidFormScreen() {
       { field: formData.patientFirstName, name: 'Patient First Name' },
       { field: formData.patientLastName, name: 'Patient Last Name' },
       { field: formData.idNumber, name: 'ID Number' },
+      { field: formData.gender, name: 'Gender' },
       { field: formData.contactNumber, name: 'Contact Number' },
+      { field: formData.caseNumber, name: 'Case Number' },
       { field: formData.mainMemberFirstName, name: 'Main Member First Name' },
       { field: formData.mainMemberLastName, name: 'Main Member Last Name' },
       { field: formData.mainMemberIdNumber, name: 'Main Member ID Number' },
@@ -878,11 +906,21 @@ export default function MedicalAidFormScreen() {
         `Patient: ${patientName}\n` +
         `ID Number: ${updatedFormData.idNumber}\n` +
         `Date of Birth: ${updatedFormData.dateOfBirth}\n` +
+        `Gender: ${updatedFormData.gender}\n` +
         `Contact: ${updatedFormData.contactNumber}\n` +
-        `Email: ${updatedFormData.email}\n\n` +
+        `Home Phone: ${updatedFormData.homePhone || 'N/A'}\n` +
+        `Work Phone: ${updatedFormData.workPhone || 'N/A'}\n` +
+        `Email: ${updatedFormData.email}\n` +
+        `Patient Address: ${updatedFormData.patientAddress || 'N/A'}\n\n` +
+        `Case Number: ${updatedFormData.caseNumber}\n` +
         `Hospital/Service Provider: ${updatedFormData.hospitalServiceProvider}\n` +
+        `Ward: ${updatedFormData.ward || 'N/A'}\n` +
+        `Bed: ${updatedFormData.bed || 'N/A'}\n` +
+        `Admission Date: ${updatedFormData.admissionDate || 'N/A'}\n` +
+        `Admission Time: ${updatedFormData.admissionTime || 'N/A'}\n` +
         `Referring Doctor: ${updatedFormData.referringDoctor}\n` +
-        `Doctor Practice Number: ${updatedFormData.doctorPracticeNumber}\n\n` +
+        `Doctor Practice Number: ${updatedFormData.doctorPracticeNumber}\n` +
+        `Authorization Code: ${updatedFormData.authorizationCode || 'N/A'}\n\n` +
         `Main Member: ${updatedFormData.mainMemberTitle} ${updatedFormData.mainMemberFirstName} ${updatedFormData.mainMemberLastName}\n` +
         `Main Member ID: ${updatedFormData.mainMemberIdNumber}\n` +
         `Medical Aid: ${updatedFormData.medicalAidName}\n` +
@@ -890,13 +928,16 @@ export default function MedicalAidFormScreen() {
         `Membership Number: ${updatedFormData.membershipNumber}\n` +
         `Dependant Code: ${updatedFormData.dependantCode}\n\n` +
         `Procedure: ${updatedFormData.procedure}\n` +
-        `ICD10 Code: ${updatedFormData.icd10Code}\n\n` +
+        `ICD10 Code: ${updatedFormData.icd10Code}\n` +
+        `Number of Sessions: ${updatedFormData.numberOfSessions}\n` +
+        `Theatre Time Witness: ${updatedFormData.theatreTimeWitness || 'N/A'}\n` +
+        `Fixed Installation: ${updatedFormData.fixedInstallation || 'N/A'}\n` +
+        `DAP: ${updatedFormData.dap || 'N/A'}\n\n` +
         `C-Arm Owned by Hospital: ${updatedFormData.cArmOwnedByHospital}\n` +
         `Contrast Usage: ${updatedFormData.contrastUsage}\n` +
         (updatedFormData.contrastUsage === 'Supplied by External' ? `Contrast Name: ${updatedFormData.contrastName}\nContrast Amount: ${updatedFormData.contrastAmount}\n` : '') +
         `Time C Arm In: ${updatedFormData.timeCArmTakenIn}\n` +
         `Time C Arm Out: ${updatedFormData.timeCArmTakenOut}\n` +
-        `Number of Sessions: ${updatedFormData.numberOfSessions}\n` +
         `Screening Time: ${((): string => { const t = String(updatedFormData.screeningTimeText ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
@@ -1208,10 +1249,80 @@ export default function MedicalAidFormScreen() {
               autoCapitalize="none"
             />
           </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Gender *</Text>
+            <View style={styles.titleContainer}>
+              {['Male', 'Female', 'Other'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.titleButton,
+                    formData.gender === option && styles.titleButtonActive,
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, gender: option }))}
+                >
+                  <Text
+                    style={[
+                      styles.titleButtonText,
+                      formData.gender === option && styles.titleButtonTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Patient Address</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={formData.patientAddress}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, patientAddress: value }))}
+              placeholder="Enter patient address as on sticker"
+              multiline
+              numberOfLines={2}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Home Phone</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.homePhone}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, homePhone: value }))}
+              placeholder="Enter home telephone"
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Work Phone</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.workPhone}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, workPhone: value }))}
+              placeholder="Enter work telephone"
+              keyboardType="phone-pad"
+            />
+          </View>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Hospital / Facility</Text>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Case Number *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.caseNumber}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, caseNumber: value }))}
+              placeholder="Enter hospital case number"
+              editable={!isReadOnly}
+            />
+          </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Hospital / Service Provider *</Text>
@@ -1220,6 +1331,57 @@ export default function MedicalAidFormScreen() {
               value={formData.hospitalServiceProvider}
               onChangeText={(value) => setFormData(prev => ({ ...prev, hospitalServiceProvider: value }))}
               placeholder="Enter hospital or service provider"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Ward</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.ward}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, ward: value }))}
+              placeholder="Enter ward"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Bed</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.bed}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, bed: value }))}
+              placeholder="Enter bed number"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Admission Date</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.admissionDate}
+              onChangeText={(value) => {
+                const numericValue = value.replace(/\D/g, '');
+                setFormData(prev => ({ ...prev, admissionDate: numericValue }));
+              }}
+              placeholder="DDMMYYYY"
+              keyboardType="numeric"
+              maxLength={8}
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Admission Time</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.admissionTime}
+              onChangeText={(value) => handleTimeInput('admissionTime', value)}
+              placeholder="Enter time (e.g., 07H30)"
+              keyboardType="numeric"
+              maxLength={5}
               editable={!isReadOnly}
             />
           </View>
@@ -1363,6 +1525,17 @@ export default function MedicalAidFormScreen() {
               placeholder="Enter dependant code"
             />
           </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Authorization Code</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.authorizationCode}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, authorizationCode: value }))}
+              placeholder="Enter medical aid authorization code"
+              editable={!isReadOnly}
+            />
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -1484,6 +1657,51 @@ export default function MedicalAidFormScreen() {
               onChangeText={(value) => setFormData(prev => ({ ...prev, numberOfSessions: value.replace(/\D/g, '') }))}
               placeholder="Enter number of 30-min sessions"
               keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Theatre Time Witness</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.theatreTimeWitness}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, theatreTimeWitness: value }))}
+              placeholder="Enter theatre time witness name"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Fixed Installation</Text>
+            <View style={styles.titleContainer}>
+              {['Yes', 'No'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.titleButton,
+                    formData.fixedInstallation === option && styles.titleButtonActive,
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, fixedInstallation: option }))}
+                >
+                  <Text
+                    style={[
+                      styles.titleButtonText,
+                      formData.fixedInstallation === option && styles.titleButtonTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>DAP (Dose Area Product)</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.dap}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, dap: value }))}
+              placeholder="Enter DAP value from sticker"
             />
           </View>
 

@@ -56,6 +56,18 @@ interface COIDAFormData {
   dateOfBirth: string;
   contactNumber: string;
   email: string;
+  gender: string;
+  patientAddress: string;
+  homePhone: string;
+  workPhone: string;
+  caseNumber: string;
+  ward: string;
+  bed: string;
+  admissionDate: string;
+  admissionTime: string;
+  theatreTimeWitness: string;
+  fixedInstallation: string;
+  dap: string;
   coidaMemberNumber: string;
   patientIodClaimNumber: string;
   employerName: string;
@@ -283,6 +295,18 @@ export default function COIDAFormScreen() {
     dateOfBirth: '',
     contactNumber: '',
     email: '',
+    gender: '',
+    patientAddress: '',
+    homePhone: '',
+    workPhone: '',
+    caseNumber: '',
+    ward: '',
+    bed: '',
+    admissionDate: '',
+    admissionTime: '',
+    theatreTimeWitness: '',
+    fixedInstallation: '',
+    dap: '',
     coidaMemberNumber: '',
     patientIodClaimNumber: '',
     employerName: '',
@@ -436,7 +460,7 @@ export default function COIDAFormScreen() {
     return `${numericValue.substring(0, 2)}H${numericValue.substring(2, 4)}`;
   };
 
-  const handleTimeInput = (field: 'timeInTheatre' | 'timeOutTheatre', value: string) => {
+  const handleTimeInput = (field: 'timeInTheatre' | 'timeOutTheatre' | 'admissionTime', value: string) => {
     const formatted = formatTimeWithH(value);
     setFormData(prev => ({ ...prev, [field]: formatted }));
   };
@@ -762,6 +786,7 @@ export default function COIDAFormScreen() {
       { field: formData.patientLastName, name: 'Last Name' },
       { field: formData.idNumber, name: 'ID Number' },
       { field: formData.coidaMemberNumber, name: 'Coida Number' },
+      { field: formData.caseNumber, name: 'Case Number' },
       { field: formData.procedure.length > 0, name: 'Procedure' },
       { field: formData.employerReportPhotos.length > 0, name: 'Employer Report Photos' },
       { field: formData.firstMedicalReportPhoto, name: 'First Medical Report Photo' },
@@ -854,8 +879,17 @@ export default function COIDAFormScreen() {
         `Patient: ${patientName}\n` +
         `ID Number: ${updatedFormData.idNumber}\n` +
         `Date of Birth: ${updatedFormData.dateOfBirth}\n` +
+        `Gender: ${updatedFormData.gender || 'N/A'}\n` +
         `Contact: ${updatedFormData.contactNumber}\n` +
-        `Email: ${updatedFormData.email}\n\n` +
+        `Home Phone: ${updatedFormData.homePhone || 'N/A'}\n` +
+        `Work Phone: ${updatedFormData.workPhone || 'N/A'}\n` +
+        `Email: ${updatedFormData.email}\n` +
+        `Patient Address: ${updatedFormData.patientAddress || 'N/A'}\n\n` +
+        `Case Number: ${updatedFormData.caseNumber || 'N/A'}\n` +
+        `Ward: ${updatedFormData.ward || 'N/A'}\n` +
+        `Bed: ${updatedFormData.bed || 'N/A'}\n` +
+        `Admission Date: ${updatedFormData.admissionDate || 'N/A'}\n` +
+        `Admission Time: ${updatedFormData.admissionTime || 'N/A'}\n\n` +
         `COIDA Number: ${updatedFormData.coidaMemberNumber}\n` +
         `IOD Claim Number: ${updatedFormData.patientIodClaimNumber}\n` +
         `Employer: ${updatedFormData.employerName}\n` +
@@ -863,7 +897,10 @@ export default function COIDAFormScreen() {
         `Date of Incident: ${updatedFormData.dateOfIncident}\n\n` +
         `ICD10 Code: ${updatedFormData.icd10Code || 'N/A'}\n` +
         `Procedures: ${proceduresList}\n` +
-        `Date of Procedure: ${updatedFormData.dateOfProcedure}\n\n` +
+        `Date of Procedure: ${updatedFormData.dateOfProcedure}\n` +
+        `Theatre Time Witness: ${updatedFormData.theatreTimeWitness || 'N/A'}\n` +
+        `Fixed Installation: ${updatedFormData.fixedInstallation || 'N/A'}\n` +
+        `DAP: ${updatedFormData.dap || 'N/A'}\n\n` +
         `Time In Theatre: ${updatedFormData.timeInTheatre}\n` +
         `Time Out Theatre: ${updatedFormData.timeOutTheatre}\n` +
         `Screening Time: ${((): string => { const t = String(updatedFormData.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
@@ -1319,6 +1356,69 @@ export default function COIDAFormScreen() {
           </View>
 
           <View style={styles.field}>
+            <Text style={styles.label}>Gender</Text>
+            <View style={styles.titleContainer}>
+              {['Male', 'Female', 'Other'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.titleButton,
+                    formData.gender === option && styles.titleButtonActive,
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, gender: option }))}
+                  disabled={isReadOnly}
+                >
+                  <Text
+                    style={[
+                      styles.titleButtonText,
+                      formData.gender === option && styles.titleButtonTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Patient Address</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={formData.patientAddress}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, patientAddress: value }))}
+              placeholder="Enter patient address as on sticker"
+              multiline
+              numberOfLines={2}
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Home Phone</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.homePhone}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, homePhone: value }))}
+              placeholder="Enter home telephone"
+              keyboardType="phone-pad"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Work Phone</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.workPhone}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, workPhone: value }))}
+              placeholder="Enter work telephone"
+              keyboardType="phone-pad"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
             <Text style={styles.label}>Coida Number *</Text>
             <TextInput
               style={styles.input}
@@ -1476,6 +1576,68 @@ export default function COIDAFormScreen() {
                 <Text style={styles.photoButtonText}>Take Photo</Text>
               </TouchableOpacity>
             )}
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Case Number</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.caseNumber}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, caseNumber: value }))}
+              placeholder="Enter hospital case number"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Ward</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.ward}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, ward: value }))}
+              placeholder="Enter ward"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Bed</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.bed}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, bed: value }))}
+              placeholder="Enter bed number"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Admission Date</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.admissionDate}
+              onChangeText={(value) => {
+                const numericValue = value.replace(/\D/g, '');
+                setFormData(prev => ({ ...prev, admissionDate: numericValue }));
+              }}
+              placeholder="DDMMYYYY"
+              keyboardType="numeric"
+              maxLength={8}
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Admission Time</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.admissionTime}
+              onChangeText={(value) => handleTimeInput('admissionTime', value)}
+              placeholder="Enter time (e.g., 07H30)"
+              keyboardType="numeric"
+              maxLength={5}
+              editable={!isReadOnly}
+            />
           </View>
 
           <View style={styles.field}>
@@ -1668,6 +1830,54 @@ export default function COIDAFormScreen() {
               placeholder="Enter time (e.g., 16H45)"
               keyboardType="numeric"
               maxLength={5}
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Theatre Time Witness</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.theatreTimeWitness}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, theatreTimeWitness: value }))}
+              placeholder="Enter theatre time witness name"
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Fixed Installation</Text>
+            <View style={styles.titleContainer}>
+              {['Yes', 'No'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.titleButton,
+                    formData.fixedInstallation === option && styles.titleButtonActive,
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, fixedInstallation: option }))}
+                  disabled={isReadOnly}
+                >
+                  <Text
+                    style={[
+                      styles.titleButtonText,
+                      formData.fixedInstallation === option && styles.titleButtonTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>DAP (Dose Area Product)</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.dap}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, dap: value }))}
+              placeholder="Enter DAP value from sticker"
               editable={!isReadOnly}
             />
           </View>

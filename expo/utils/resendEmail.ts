@@ -12,11 +12,21 @@ export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]
     `Patient: ${patientName}\n` +
     `ID Number: ${form.idNumber || ''}\n` +
     `Date of Birth: ${form.dateOfBirth || ''}\n` +
+    `Gender: ${(form as any).gender || 'N/A'}\n` +
     `Contact: ${form.contactNumber || ''}\n` +
-    `Email: ${form.email || ''}\n\n` +
+    `Home Phone: ${(form as any).homePhone || 'N/A'}\n` +
+    `Work Phone: ${(form as any).workPhone || 'N/A'}\n` +
+    `Email: ${form.email || ''}\n` +
+    `Patient Address: ${(form as any).patientAddress || 'N/A'}\n\n` +
+    `Case Number: ${(form as any).caseNumber || 'N/A'}\n` +
     `Hospital/Service Provider: ${form.hospitalServiceProvider || ''}\n` +
+    `Ward: ${(form as any).ward || 'N/A'}\n` +
+    `Bed: ${(form as any).bed || 'N/A'}\n` +
+    `Admission Date: ${(form as any).admissionDate || 'N/A'}\n` +
+    `Admission Time: ${(form as any).admissionTime || 'N/A'}\n` +
     `Referring Doctor: ${form.referringDoctor || ''}\n` +
-    `Doctor Practice Number: ${form.doctorPracticeNumber || ''}\n\n` +
+    `Doctor Practice Number: ${form.doctorPracticeNumber || ''}\n` +
+    `Authorization Code: ${(form as any).authorizationCode || 'N/A'}\n\n` +
     `Main Member: ${form.mainMemberTitle || ''} ${form.mainMemberFirstName || ''} ${form.mainMemberLastName || ''}\n` +
     `Main Member ID: ${form.mainMemberIdNumber || ''}\n` +
     `Medical Aid: ${form.medicalAidName || ''}\n` +
@@ -24,8 +34,11 @@ export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]
     `Membership Number: ${form.membershipNumber || ''}\n` +
     `Dependant Code: ${form.dependantCode || ''}\n\n` +
     `Procedure: ${form.procedure || ''}\n` +
-    `ICD10 Code: ${form.icd10Code || ''}\n\n` +
+    `ICD10 Code: ${form.icd10Code || ''}\n` +
     `Number of Sessions: ${((form as any).numberOfSessions) || ''}\n` +
+    `Theatre Time Witness: ${(form as any).theatreTimeWitness || 'N/A'}\n` +
+    `Fixed Installation: ${(form as any).fixedInstallation || 'N/A'}\n` +
+    `DAP: ${(form as any).dap || 'N/A'}\n\n` +
     `C-Arm Owned by Hospital: ${((form as any).cArmOwnedByHospital) || ''}\n` +
     `Contrast Usage: ${((form as any).contrastUsage) || ''}\n` +
     ((form as any).contrastName ? `Contrast Name: ${(form as any).contrastName}\n` : '') +
@@ -62,8 +75,17 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `Patient: ${patientName}\n` +
     `ID Number: ${form.idNumber || ''}\n` +
     `Date of Birth: ${form.dateOfBirth || ''}\n` +
+    `Gender: ${coidaForm.gender || 'N/A'}\n` +
     `Contact: ${form.contactNumber || ''}\n` +
-    `Email: ${form.email || ''}\n\n` +
+    `Home Phone: ${coidaForm.homePhone || 'N/A'}\n` +
+    `Work Phone: ${coidaForm.workPhone || 'N/A'}\n` +
+    `Email: ${form.email || ''}\n` +
+    `Patient Address: ${coidaForm.patientAddress || 'N/A'}\n\n` +
+    `Case Number: ${coidaForm.caseNumber || 'N/A'}\n` +
+    `Ward: ${coidaForm.ward || 'N/A'}\n` +
+    `Bed: ${coidaForm.bed || 'N/A'}\n` +
+    `Admission Date: ${coidaForm.admissionDate || 'N/A'}\n` +
+    `Admission Time: ${coidaForm.admissionTime || 'N/A'}\n\n` +
     `COIDA Number: ${coidaForm.coidaMemberNumber || ''}\n` +
     `IOD Claim Number: ${coidaForm.patientIodClaimNumber || ''}\n` +
     `Employer: ${coidaForm.employerName || ''}\n` +
@@ -71,7 +93,10 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `Date of Incident: ${coidaForm.dateOfIncident || ''}\n\n` +
     `ICD10 Code: ${form.icd10Code || 'N/A'}\n` +
     `Procedures: ${proceduresList}\n` +
-    `Date of Procedure: ${coidaForm.dateOfProcedure || ''}\n\n` +
+    `Date of Procedure: ${coidaForm.dateOfProcedure || ''}\n` +
+    `Theatre Time Witness: ${coidaForm.theatreTimeWitness || 'N/A'}\n` +
+    `Fixed Installation: ${coidaForm.fixedInstallation || 'N/A'}\n` +
+    `DAP: ${coidaForm.dap || 'N/A'}\n\n` +
     `Time In Theatre: ${coidaForm.timeInTheatre || ''}\n` +
     `Time Out Theatre: ${coidaForm.timeOutTheatre || ''}\n` +
     `Fluoroscopy Time: ${((): string => { const t = String(coidaForm.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +

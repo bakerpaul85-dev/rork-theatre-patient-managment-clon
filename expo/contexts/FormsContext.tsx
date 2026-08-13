@@ -41,10 +41,22 @@ export interface FormData {
   dateOfBirth: string;
   contactNumber: string;
   email: string;
+  gender: string;
+  patientAddress: string;
+  homePhone: string;
+  workPhone: string;
   hospitalServiceProvider: string;
   ward: string;
+  bed: string;
+  admissionDate: string;
+  admissionTime: string;
+  caseNumber: string;
   referringDoctor: string;
   doctorPracticeNumber: string;
+  authorizationCode: string;
+  theatreTimeWitness: string;
+  fixedInstallation: string;
+  dap: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
@@ -493,9 +505,12 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'id', 'formType', 'status', 'caseStatus', 'caseStatusHistory', 'createdAt', 'updatedAt', 'submittedBy',
         'date', 'patientTitle', 'patientFirstName', 'patientLastName', 'patientName',
         'idNumber', 'dateOfBirth', 'contactNumber', 'email',
+        'gender', 'patientAddress', 'homePhone', 'workPhone',
         'mainMemberTitle', 'mainMemberFirstName', 'mainMemberLastName', 'mainMemberIdNumber',
         'medicalAidName', 'medicalAidPlan', 'membershipNumber', 'dependantCode',
-        'hospitalServiceProvider', 'ward', 'referringDoctor', 'doctorPracticeNumber',
+        'hospitalServiceProvider', 'ward', 'bed', 'admissionDate', 'admissionTime', 'caseNumber',
+        'referringDoctor', 'doctorPracticeNumber', 'authorizationCode',
+        'theatreTimeWitness', 'fixedInstallation', 'dap',
         'nextOfKinName', 'nextOfKinContactNumber',
         'procedure', 'icd10Code', 'screeningTimeText', 'reasonForTimeDiscrepancy',
         'timeCArmTakenIn', 'timeCArmTakenOut',

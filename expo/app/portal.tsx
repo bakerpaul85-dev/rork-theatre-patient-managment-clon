@@ -555,17 +555,21 @@ export default function PortalScreen() {
     const sections = [
       { title: 'Patient Information', icon: User, fields: [
         ['Name', `${form.patientTitle ?? ''} ${form.patientFirstName ?? ''} ${form.patientLastName ?? ''}`.trim()],
-        ['ID Number', form.idNumber], ['Date of Birth', form.dateOfBirth],
-        ['Contact', form.contactNumber], ['Email', form.email],
+        ['ID Number', form.idNumber], ['Date of Birth', form.dateOfBirth], ['Gender', anyForm.gender],
+        ['Contact', form.contactNumber], ['Home Phone', anyForm.homePhone], ['Work Phone', anyForm.workPhone], ['Email', form.email],
+        ['Address', anyForm.patientAddress],
       ]},
       { title: 'Medical Details', icon: Briefcase, fields: [
         ['Form Type', form.formType === 'medical-aid' ? 'Medical Aid' : 'COIDA'],
+        ['Case Number', anyForm.caseNumber], ['Ward', anyForm.ward], ['Bed', anyForm.bed],
+        ['Admission Date', anyForm.admissionDate], ['Admission Time', anyForm.admissionTime],
         ['Procedure', form.procedure], ['ICD-10 Code', form.icd10Code],
         ['Medical Aid', form.medicalAidName], ['Membership #', form.membershipNumber],
-        ['Dependant Code', form.dependantCode],
+        ['Dependant Code', form.dependantCode], ['Authorization Code', anyForm.authorizationCode],
         ['Number of Sessions', anyForm.numberOfSessions],
-        ['C-Arm Hospital Owned', anyForm.cArmOwnedByHospital],
+        ['C-Arm Hospital Owned', anyForm.cArmOwnedByHospital], ['Fixed Installation', anyForm.fixedInstallation], ['DAP', anyForm.dap],
         ['Contrast Usage', anyForm.contrastUsage],
+        ['Theatre Time Witness', anyForm.theatreTimeWitness],
         ...(anyForm.contrastUsage === 'Supplied by External' ? [
           ['Contrast Name', anyForm.contrastName],
           ['Contrast Amount', anyForm.contrastAmount],
