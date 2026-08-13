@@ -5,7 +5,7 @@
  * from a captured hospital sticker photo, then auto-fills form fields.
  */
 
-import * as ImageManipulator from 'expo-image-manipulator';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 
 const TOOLKIT_URL = process.env.EXPO_PUBLIC_TOOLKIT_URL;
@@ -69,10 +69,10 @@ const resizeForUpload = async (imageUri: string): Promise<string> => {
   ];
 
   for (const step of steps) {
-    const result = await ImageManipulator.manipulateAsync(
+    const result = await manipulateAsync(
       imageUri,
       [{ resize: { width: step.width } }],
-      { compress: step.quality, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      { compress: step.quality, format: SaveFormat.JPEG, base64: true },
     );
 
     if (result.base64) {
@@ -84,10 +84,10 @@ const resizeForUpload = async (imageUri: string): Promise<string> => {
   }
 
   // Last resort: smallest size
-  const result = await ImageManipulator.manipulateAsync(
+  const result = await manipulateAsync(
     imageUri,
     [{ resize: { width: 512 } }],
-    { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    { compress: 0.65, format: SaveFormat.JPEG, base64: true },
   );
   return result.base64 || '';
 };
