@@ -1131,7 +1131,7 @@ export default function MedicalAidFormScreen() {
         scrollEventThrottle={16}
       >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Hospital Information</Text>
+          <Text style={styles.sectionTitle}>Hospital Sticker</Text>
           
           <View style={styles.photoField}>
             <Text style={styles.label}>Hospital Sticker Photo *</Text>
@@ -1173,6 +1173,10 @@ export default function MedicalAidFormScreen() {
               </TouchableOpacity>
             )}
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Hospital Information</Text>
 
           <View style={styles.field}>
             <Text style={styles.label}>Date *</Text>

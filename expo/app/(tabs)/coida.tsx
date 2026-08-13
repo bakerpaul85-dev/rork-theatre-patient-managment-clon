@@ -1278,6 +1278,51 @@ export default function COIDAFormScreen() {
         scrollEventThrottle={16}
       >
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Hospital Sticker</Text>
+          
+          <View style={styles.photoField}>
+            <Text style={styles.label}>Hospital Sticker Photo *</Text>
+            {formData.hospitalStickerPhoto ? (
+              <View style={styles.photoPreview}>
+                <Image source={{ uri: formData.hospitalStickerPhoto }} style={styles.photoImage} />
+                {formData.hospitalStickerPhotoMetadata?.latitude != null && formData.hospitalStickerPhotoMetadata?.longitude != null && (
+                  <View style={styles.gpsBadge}>
+                    <MapPin size={12} color="#28A745" />
+                    <Text style={styles.gpsText}>{formData.hospitalStickerPhotoMetadata.latitude.toFixed(6)}, {formData.hospitalStickerPhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingSticker && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#00A3A3" />
+                    <Text style={styles.ocrLoadingText}>Extracting sticker data with AI...</Text>
+                  </View>
+                )}
+                {!isExtractingSticker && stickerExtractedFields.length > 0 && (
+                  <View style={styles.ocrSuccessBadge}>
+                    <Sparkles size={14} color="#00A3A3" />
+                    <Text style={styles.ocrSuccessText}>{stickerExtractedFields.length} fields auto-filled from sticker</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.retakeButton}
+                  onPress={() => openCamera('hospitalSticker')}
+                >
+                  <Text style={styles.retakeButtonText}>Retake</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={() => openCamera('hospitalSticker')}
+              >
+                <Camera size={24} color="#00A3A3" />
+                <Text style={styles.photoButtonText}>Take Photo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
           
           <View style={styles.field}>
@@ -1569,47 +1614,6 @@ export default function COIDAFormScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Hospital Information</Text>
-          
-          <View style={styles.photoField}>
-            <Text style={styles.label}>Hospital Sticker Photo *</Text>
-            {formData.hospitalStickerPhoto ? (
-              <View style={styles.photoPreview}>
-                <Image source={{ uri: formData.hospitalStickerPhoto }} style={styles.photoImage} />
-                {formData.hospitalStickerPhotoMetadata?.latitude != null && formData.hospitalStickerPhotoMetadata?.longitude != null && (
-                  <View style={styles.gpsBadge}>
-                    <MapPin size={12} color="#28A745" />
-                    <Text style={styles.gpsText}>{formData.hospitalStickerPhotoMetadata.latitude.toFixed(6)}, {formData.hospitalStickerPhotoMetadata.longitude.toFixed(6)}</Text>
-                  </View>
-                )}
-                {isExtractingSticker && (
-                  <View style={styles.ocrLoadingBadge}>
-                    <ActivityIndicator size="small" color="#00A3A3" />
-                    <Text style={styles.ocrLoadingText}>Extracting sticker data with AI...</Text>
-                  </View>
-                )}
-                {!isExtractingSticker && stickerExtractedFields.length > 0 && (
-                  <View style={styles.ocrSuccessBadge}>
-                    <Sparkles size={14} color="#00A3A3" />
-                    <Text style={styles.ocrSuccessText}>{stickerExtractedFields.length} fields auto-filled from sticker</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.retakeButton}
-                  onPress={() => openCamera('hospitalSticker')}
-                >
-                  <Text style={styles.retakeButtonText}>Retake</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => openCamera('hospitalSticker')}
-              >
-                <Camera size={24} color="#00A3A3" />
-                <Text style={styles.photoButtonText}>Take Photo</Text>
-              </TouchableOpacity>
-            )}
-          </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Case Number</Text>
