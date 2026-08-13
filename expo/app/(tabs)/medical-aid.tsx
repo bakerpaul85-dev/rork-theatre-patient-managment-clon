@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
   Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -17,13 +18,14 @@ import * as Location from 'expo-location';
 import * as MailComposer from 'expo-mail-composer';
 import { generateHL7File } from '@/utils/hl7Generator';
 import { FormData as ContextFormData } from '@/contexts/FormsContext';
-import { Camera, X, Check, Save, Search, ChevronDown, XCircle, CheckSquare, Square, MapPin } from 'lucide-react-native';
+import { Camera, X, Check, Save, Search, ChevronDown, XCircle, CheckSquare, Square, MapPin, Sparkles } from 'lucide-react-native';
 import { MEDICAL_AID_NAMES } from '@/constants/medicalAids';
 import { PROCEDURE_OPTIONS } from '@/constants/procedures';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { extractStickerData, normalizeStickerData } from '@/utils/stickerOCR';
 
 
 type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
@@ -447,6 +449,8 @@ export default function MedicalAidFormScreen() {
   const [showCamera, setShowCamera] = useState(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>(null);
   const [cameraRef, setCameraRef] = useState<any>(null);
+  const [isExtractingSticker, setIsExtractingSticker] = useState<boolean>(false);
+  const [stickerExtractedFields, setStickerExtractedFields] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollPositionRef = useRef<number>(0);
   const navigation = useNavigation();
@@ -769,6 +773,23 @@ export default function MedicalAidFormScreen() {
               hospitalStickerPhoto: photoUri,
               hospitalStickerPhotoMetadata: metadata,
             }));
+            void (async () => {
+              setIsExtractingSticker(true);
+              try {
+                const extracted = await extractStickerData(photoUri);
+                const normalized = normalizeStickerData(extracted);
+                const filledFields = Object.keys(normalized);
+                if (filledFields.length > 0) {
+                  setFormData(prev => ({ ...prev, ...normalized }));
+                  setStickerExtractedFields(filledFields);
+                  console.log('[StickerOCR] Auto-filled fields:', filledFields.join(', '));
+                }
+              } catch (ocrError) {
+                console.error('[StickerOCR] Extraction failed:', ocrError);
+              } finally {
+                setIsExtractingSticker(false);
+              }
+            })();
             break;
           case 'timeInTheatre':
             setFormData(prev => ({ 
@@ -1121,6 +1142,18 @@ export default function MedicalAidFormScreen() {
                   <View style={styles.gpsBadge}>
                     <MapPin size={12} color="#28A745" />
                     <Text style={styles.gpsText}>{formData.hospitalStickerPhotoMetadata.latitude.toFixed(6)}, {formData.hospitalStickerPhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingSticker && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#0066CC" />
+                    <Text style={styles.ocrLoadingText}>Extracting sticker data with AI...</Text>
+                  </View>
+                )}
+                {!isExtractingSticker && stickerExtractedFields.length > 0 && (
+                  <View style={styles.ocrSuccessBadge}>
+                    <Sparkles size={14} color="#0066CC" />
+                    <Text style={styles.ocrSuccessText}>{stickerExtractedFields.length} fields auto-filled from sticker</Text>
                   </View>
                 )}
                 <TouchableOpacity
@@ -2106,5 +2139,35 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 40,
+  },
+  ocrLoadingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#E7F3FF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  ocrLoadingText: {
+    fontSize: 12,
+    color: '#0066CC',
+    fontWeight: '500' as const,
+  },
+  ocrSuccessBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E7F3FF',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  ocrSuccessText: {
+    fontSize: 12,
+    color: '#0066CC',
+    fontWeight: '600' as const,
   },
 });

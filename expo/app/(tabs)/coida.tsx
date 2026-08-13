@@ -11,19 +11,21 @@ import {
   Platform,
   Modal,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as MailComposer from 'expo-mail-composer';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Camera, X, Check, Save, FileSpreadsheet, ChevronDown, Scan, Plus, Trash, ScanLine, MapPin } from 'lucide-react-native';
+import { Camera, X, Check, Save, FileSpreadsheet, ChevronDown, Scan, Plus, Trash, ScanLine, MapPin, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { generateClaimSpreadsheet } from '@/utils/excelGenerator';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import DocumentScanner from '@/components/DocumentScanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { extractStickerData, normalizeStickerData } from '@/utils/stickerOCR';
 
 
 
@@ -326,6 +328,8 @@ export default function COIDAFormScreen() {
   });
 
   const [formData, setFormData] = useState<COIDAFormData>(getInitialFormData());
+  const [isExtractingSticker, setIsExtractingSticker] = useState<boolean>(false);
+  const [stickerExtractedFields, setStickerExtractedFields] = useState<string[]>([]);
 
   const isReadOnly = formData.radiographerSignatureTimestamp !== '';
 
@@ -559,6 +563,23 @@ export default function COIDAFormScreen() {
             hospitalStickerPhoto: photoUri,
             hospitalStickerPhotoMetadata: photoMetadata,
           }));
+          void (async () => {
+            setIsExtractingSticker(true);
+            try {
+              const extracted = await extractStickerData(photoUri);
+              const normalized = normalizeStickerData(extracted);
+              const filledFields = Object.keys(normalized);
+              if (filledFields.length > 0) {
+                setFormData(prev => ({ ...prev, ...normalized }));
+                setStickerExtractedFields(filledFields);
+                console.log('[StickerOCR] COIDA auto-filled fields:', filledFields.join(', '));
+              }
+            } catch (ocrError) {
+              console.error('[StickerOCR] COIDA extraction failed:', ocrError);
+            } finally {
+              setIsExtractingSticker(false);
+            }
+          })();
           break;
         case 'timeInTheatreClock':
           console.log('Setting time in theatre clock photo');
@@ -1558,6 +1579,18 @@ export default function COIDAFormScreen() {
                   <View style={styles.gpsBadge}>
                     <MapPin size={12} color="#28A745" />
                     <Text style={styles.gpsText}>{formData.hospitalStickerPhotoMetadata.latitude.toFixed(6)}, {formData.hospitalStickerPhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingSticker && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#00A3A3" />
+                    <Text style={styles.ocrLoadingText}>Extracting sticker data with AI...</Text>
+                  </View>
+                )}
+                {!isExtractingSticker && stickerExtractedFields.length > 0 && (
+                  <View style={styles.ocrSuccessBadge}>
+                    <Sparkles size={14} color="#00A3A3" />
+                    <Text style={styles.ocrSuccessText}>{stickerExtractedFields.length} fields auto-filled from sticker</Text>
                   </View>
                 )}
                 <TouchableOpacity
@@ -2643,6 +2676,36 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 40,
+  },
+  ocrLoadingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#E7F9F9',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  ocrLoadingText: {
+    fontSize: 12,
+    color: '#00A3A3',
+    fontWeight: '500' as const,
+  },
+  ocrSuccessBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E7F9F9',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  ocrSuccessText: {
+    fontSize: 12,
+    color: '#00A3A3',
+    fontWeight: '600' as const,
   },
   excelButton: {
     flexDirection: 'row' as const,
