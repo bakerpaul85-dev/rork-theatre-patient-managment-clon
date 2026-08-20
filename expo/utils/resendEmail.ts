@@ -18,10 +18,7 @@ export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]
     `Work Phone: ${(form as any).workPhone || 'N/A'}\n` +
     `Email: ${form.email || ''}\n` +
     `Patient Address: ${(form as any).patientAddress || 'N/A'}\n\n` +
-    `Case Number: ${(form as any).caseNumber || 'N/A'}\n` +
     `Hospital/Service Provider: ${form.hospitalServiceProvider || ''}\n` +
-    `Ward: ${(form as any).ward || 'N/A'}\n` +
-    `Bed: ${(form as any).bed || 'N/A'}\n` +
     `Admission Date: ${(form as any).admissionDate || 'N/A'}\n` +
     `Admission Time: ${(form as any).admissionTime || 'N/A'}\n` +
     `Referring Doctor: ${form.referringDoctor || ''}\n` +
@@ -36,9 +33,7 @@ export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]
     `Procedure: ${form.procedure || ''}\n` +
     `ICD10 Code: ${form.icd10Code || ''}\n` +
     `Number of Sessions: ${((form as any).numberOfSessions) || ''}\n` +
-    `Theatre Time Witness: ${(form as any).theatreTimeWitness || 'N/A'}\n` +
-    `Fixed Installation: ${(form as any).fixedInstallation || 'N/A'}\n` +
-    `DAP: ${(form as any).dap || 'N/A'}\n\n` +
+    `Theatre Time Witness: ${(form as any).theatreTimeWitness || 'N/A'}\n\n` +
     `C-Arm Owned by Hospital: ${((form as any).cArmOwnedByHospital) || ''}\n` +
     `Contrast Usage: ${((form as any).contrastUsage) || ''}\n` +
     ((form as any).contrastName ? `Contrast Name: ${(form as any).contrastName}\n` : '') +

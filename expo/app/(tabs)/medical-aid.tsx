@@ -47,18 +47,13 @@ interface FormData {
   homePhone: string;
   workPhone: string;
   hospitalServiceProvider: string;
-  ward: string;
-  bed: string;
   admissionDate: string;
   admissionTime: string;
-  caseNumber: string;
   referringDoctor: string;
   doctorPracticeNumber: string;
   authorizationCode: string;
   numberOfSessions: string;
   theatreTimeWitness: string;
-  fixedInstallation: string;
-  dap: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
@@ -498,18 +493,13 @@ export default function MedicalAidFormScreen() {
     homePhone: '',
     workPhone: '',
     hospitalServiceProvider: '',
-    ward: '',
-    bed: '',
     admissionDate: '',
     admissionTime: '',
-    caseNumber: '',
     referringDoctor: '',
     doctorPracticeNumber: '',
     authorizationCode: '',
     numberOfSessions: '',
     theatreTimeWitness: '',
-    fixedInstallation: '',
-    dap: '',
     mainMemberTitle: 'Mr',
     mainMemberFirstName: '',
     mainMemberLastName: '',
@@ -828,7 +818,6 @@ export default function MedicalAidFormScreen() {
       { field: formData.idNumber, name: 'ID Number' },
       { field: formData.gender, name: 'Gender' },
       { field: formData.contactNumber, name: 'Contact Number' },
-      { field: formData.caseNumber, name: 'Case Number' },
       { field: formData.mainMemberFirstName, name: 'Main Member First Name' },
       { field: formData.mainMemberLastName, name: 'Main Member Last Name' },
       { field: formData.mainMemberIdNumber, name: 'Main Member ID Number' },
@@ -933,10 +922,7 @@ export default function MedicalAidFormScreen() {
         `Work Phone: ${updatedFormData.workPhone || 'N/A'}\n` +
         `Email: ${updatedFormData.email}\n` +
         `Patient Address: ${updatedFormData.patientAddress || 'N/A'}\n\n` +
-        `Case Number: ${updatedFormData.caseNumber}\n` +
         `Hospital/Service Provider: ${updatedFormData.hospitalServiceProvider}\n` +
-        `Ward: ${updatedFormData.ward || 'N/A'}\n` +
-        `Bed: ${updatedFormData.bed || 'N/A'}\n` +
         `Admission Date: ${updatedFormData.admissionDate || 'N/A'}\n` +
         `Admission Time: ${updatedFormData.admissionTime || 'N/A'}\n` +
         `Referring Doctor: ${updatedFormData.referringDoctor}\n` +
@@ -951,9 +937,7 @@ export default function MedicalAidFormScreen() {
         `Procedure: ${updatedFormData.procedure}\n` +
         `ICD10 Code: ${updatedFormData.icd10Code}\n` +
         `Number of Sessions: ${updatedFormData.numberOfSessions}\n` +
-        `Theatre Time Witness: ${updatedFormData.theatreTimeWitness || 'N/A'}\n` +
-        `Fixed Installation: ${updatedFormData.fixedInstallation || 'N/A'}\n` +
-        `DAP: ${updatedFormData.dap || 'N/A'}\n\n` +
+        `Theatre Time Witness: ${updatedFormData.theatreTimeWitness || 'N/A'}\n\n` +
         `C-Arm Owned by Hospital: ${updatedFormData.cArmOwnedByHospital}\n` +
         `Contrast Usage: ${updatedFormData.contrastUsage}\n` +
         (updatedFormData.contrastUsage === 'Supplied by External' ? `Contrast Name: ${updatedFormData.contrastName}\nContrast Amount: ${updatedFormData.contrastAmount}\n` : '') +
@@ -1351,45 +1335,12 @@ export default function MedicalAidFormScreen() {
           <Text style={styles.sectionTitle}>Hospital / Facility</Text>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Case Number *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.caseNumber}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, caseNumber: value }))}
-              placeholder="Enter hospital case number"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
             <Text style={styles.label}>Hospital / Service Provider *</Text>
             <TextInput
               style={styles.input}
               value={formData.hospitalServiceProvider}
               onChangeText={(value) => setFormData(prev => ({ ...prev, hospitalServiceProvider: value }))}
               placeholder="Enter hospital or service provider"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Ward</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.ward}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, ward: value }))}
-              placeholder="Enter ward"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Bed</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.bed}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, bed: value }))}
-              placeholder="Enter bed number"
               editable={!isReadOnly}
             />
           </View>
@@ -1704,41 +1655,6 @@ export default function MedicalAidFormScreen() {
               value={formData.theatreTimeWitness}
               onChangeText={(value) => setFormData(prev => ({ ...prev, theatreTimeWitness: value }))}
               placeholder="Enter theatre time witness name"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Fixed Installation</Text>
-            <View style={styles.titleContainer}>
-              {['Yes', 'No'].map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.titleButton,
-                    formData.fixedInstallation === option && styles.titleButtonActive,
-                  ]}
-                  onPress={() => setFormData(prev => ({ ...prev, fixedInstallation: option }))}
-                >
-                  <Text
-                    style={[
-                      styles.titleButtonText,
-                      formData.fixedInstallation === option && styles.titleButtonTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>DAP (Dose Area Product)</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.dap}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, dap: value }))}
-              placeholder="Enter DAP value from sticker"
             />
           </View>
 

@@ -561,18 +561,12 @@ export default function PortalScreen() {
       ]},
       { title: 'Medical Details', icon: Briefcase, fields: [
         ['Form Type', form.formType === 'medical-aid' ? 'Medical Aid' : 'COIDA'],
-        ...(form.formType === 'medical-aid' ? [
-          ['Case Number', anyForm.caseNumber], ['Ward', anyForm.ward], ['Bed', anyForm.bed],
-        ] as const : []),
         ['Admission Date', anyForm.admissionDate], ['Admission Time', anyForm.admissionTime],
         ['Procedure', form.procedure], ['ICD-10 Code', form.icd10Code],
         ['Medical Aid', form.medicalAidName], ['Membership #', form.membershipNumber],
         ['Dependant Code', form.dependantCode], ['Authorization Code', anyForm.authorizationCode],
         ['Number of Sessions', anyForm.numberOfSessions],
-        ['C-Arm Hospital Owned', anyForm.cArmOwnedByHospital], ['Fixed Installation', anyForm.fixedInstallation],
-        ...(form.formType === 'medical-aid' ? [
-          ['DAP', anyForm.dap],
-        ] as const : []),
+        ['C-Arm Hospital Owned', anyForm.cArmOwnedByHospital],
         ['Contrast Usage', anyForm.contrastUsage],
         ['Theatre Time Witness', anyForm.theatreTimeWitness],
         ...(anyForm.contrastUsage === 'Supplied by External' ? [
