@@ -81,9 +81,6 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `Work Phone: ${coidaForm.workPhone || 'N/A'}\n` +
     `Email: ${form.email || ''}\n` +
     `Patient Address: ${coidaForm.patientAddress || 'N/A'}\n\n` +
-    `Case Number: ${coidaForm.caseNumber || 'N/A'}\n` +
-    `Ward: ${coidaForm.ward || 'N/A'}\n` +
-    `Bed: ${coidaForm.bed || 'N/A'}\n` +
     `Admission Date: ${coidaForm.admissionDate || 'N/A'}\n` +
     `Admission Time: ${coidaForm.admissionTime || 'N/A'}\n\n` +
     `COIDA Number: ${coidaForm.coidaMemberNumber || ''}\n` +
@@ -95,8 +92,7 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `Procedures: ${proceduresList}\n` +
     `Date of Procedure: ${coidaForm.dateOfProcedure || ''}\n` +
     `Theatre Time Witness: ${coidaForm.theatreTimeWitness || 'N/A'}\n` +
-    `Fixed Installation: ${coidaForm.fixedInstallation || 'N/A'}\n` +
-    `DAP: ${coidaForm.dap || 'N/A'}\n\n` +
+    `Fixed Installation: ${coidaForm.fixedInstallation || 'N/A'}\n\n` +
     `Time In Theatre: ${coidaForm.timeInTheatre || ''}\n` +
     `Time Out Theatre: ${coidaForm.timeOutTheatre || ''}\n` +
     `Fluoroscopy Time: ${((): string => { const t = String(coidaForm.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
