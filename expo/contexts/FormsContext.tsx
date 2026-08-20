@@ -54,7 +54,6 @@ export interface FormData {
   referringDoctor: string;
   doctorPracticeNumber: string;
   authorizationCode: string;
-  theatreTimeWitness: string;
   fixedInstallation: string;
   dap: string;
   mainMemberTitle: Title;
@@ -510,7 +509,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'medicalAidName', 'medicalAidPlan', 'membershipNumber', 'dependantCode',
         'hospitalServiceProvider', 'ward', 'bed', 'admissionDate', 'admissionTime', 'caseNumber',
         'referringDoctor', 'doctorPracticeNumber', 'authorizationCode',
-        'theatreTimeWitness', 'fixedInstallation', 'dap',
+        'fixedInstallation', 'dap',
         'nextOfKinName', 'nextOfKinContactNumber',
         'procedure', 'icd10Code', 'screeningTimeText', 'reasonForTimeDiscrepancy',
         'timeCArmTakenIn', 'timeCArmTakenOut',

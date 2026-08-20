@@ -47,7 +47,6 @@ export interface ExtractedStickerData {
   hospitalServiceProvider?: string;
   dap?: string;
   fixedInstallation?: string;
-  theatreTimeWitness?: string;
 }
 
 const stripDataUriPrefix = (uri: string): string => {
@@ -126,8 +125,7 @@ Return ONLY a JSON object (no markdown, no explanation) with these fields. Leave
   "doctorPracticeNumber": "",
   "hospitalServiceProvider": "",
   "dap": "",
-  "fixedInstallation": "Yes|No",
-  "theatreTimeWitness": ""
+  "fixedInstallation": "Yes|No"
 }
 
 Rules:
@@ -300,7 +298,6 @@ export const normalizeStickerData = (data: ExtractedStickerData): Partial<Record
     const match = validYesNo.find(v => v.toLowerCase() === data.fixedInstallation?.toLowerCase());
     if (match) result.fixedInstallation = match;
   }
-  if (data.theatreTimeWitness) result.theatreTimeWitness = data.theatreTimeWitness;
 
   return result;
 };

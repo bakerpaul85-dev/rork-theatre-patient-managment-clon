@@ -174,7 +174,6 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
         contrastUsage: anyForm.contrastUsage ?? '',
         contrastName: anyForm.contrastName ?? '',
         contrastAmount: anyForm.contrastAmount ?? '',
-        theatreTimeWitness: anyForm.theatreTimeWitness ?? '',
         fixedInstallation: anyForm.fixedInstallation ?? '',
         dap: anyForm.dap ?? '',
         radiographerName: form.radiographerName ?? '',

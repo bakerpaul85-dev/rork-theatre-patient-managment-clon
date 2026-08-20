@@ -215,10 +215,6 @@ export const generateHL7Message = (form: FormData): string => {
     segments.push(generateOBXSegment(obxCounter++, 'AUTHORIZATION_CODE', form.authorizationCode || ''));
   }
 
-  if (form.theatreTimeWitness) {
-    segments.push(generateOBXSegment(obxCounter++, 'THEATRE_TIME_WITNESS', form.theatreTimeWitness || ''));
-  }
-
   if (form.fixedInstallation) {
     segments.push(generateOBXSegment(obxCounter++, 'FIXED_INSTALLATION', form.fixedInstallation || ''));
   }

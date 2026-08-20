@@ -53,7 +53,6 @@ interface FormData {
   doctorPracticeNumber: string;
   authorizationCode: string;
   numberOfSessions: string;
-  theatreTimeWitness: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
@@ -499,7 +498,6 @@ export default function MedicalAidFormScreen() {
     doctorPracticeNumber: '',
     authorizationCode: '',
     numberOfSessions: '',
-    theatreTimeWitness: '',
     mainMemberTitle: 'Mr',
     mainMemberFirstName: '',
     mainMemberLastName: '',
@@ -936,8 +934,7 @@ export default function MedicalAidFormScreen() {
         `Dependant Code: ${updatedFormData.dependantCode}\n\n` +
         `Procedure: ${updatedFormData.procedure}\n` +
         `ICD10 Code: ${updatedFormData.icd10Code}\n` +
-        `Number of Sessions: ${updatedFormData.numberOfSessions}\n` +
-        `Theatre Time Witness: ${updatedFormData.theatreTimeWitness || 'N/A'}\n\n` +
+        `Number of Sessions: ${updatedFormData.numberOfSessions}\n\n` +
         `C-Arm Owned by Hospital: ${updatedFormData.cArmOwnedByHospital}\n` +
         `Contrast Usage: ${updatedFormData.contrastUsage}\n` +
         (updatedFormData.contrastUsage === 'Supplied by External' ? `Contrast Name: ${updatedFormData.contrastName}\nContrast Amount: ${updatedFormData.contrastAmount}\n` : '') +
@@ -1645,16 +1642,6 @@ export default function MedicalAidFormScreen() {
               onChangeText={(value) => setFormData(prev => ({ ...prev, numberOfSessions: value.replace(/\D/g, '') }))}
               placeholder="Enter number of 30-min sessions"
               keyboardType="numeric"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Theatre Time Witness</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.theatreTimeWitness}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, theatreTimeWitness: value }))}
-              placeholder="Enter theatre time witness name"
             />
           </View>
 

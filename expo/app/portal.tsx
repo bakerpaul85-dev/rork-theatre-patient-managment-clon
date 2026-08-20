@@ -568,7 +568,6 @@ export default function PortalScreen() {
         ['Number of Sessions', anyForm.numberOfSessions],
         ['C-Arm Hospital Owned', anyForm.cArmOwnedByHospital],
         ['Contrast Usage', anyForm.contrastUsage],
-        ['Theatre Time Witness', anyForm.theatreTimeWitness],
         ...(anyForm.contrastUsage === 'Supplied by External' ? [
           ['Contrast Name', anyForm.contrastName],
           ['Contrast Amount', anyForm.contrastAmount],

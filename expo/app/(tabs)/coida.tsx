@@ -64,7 +64,6 @@ interface COIDAFormData {
   workPhone: string;
   admissionDate: string;
   admissionTime: string;
-  theatreTimeWitness: string;
   fixedInstallation: string;
   coidaMemberNumber: string;
   patientIodClaimNumber: string;
@@ -299,7 +298,6 @@ export default function COIDAFormScreen() {
     workPhone: '',
     admissionDate: '',
     admissionTime: '',
-    theatreTimeWitness: '',
     fixedInstallation: '',
     coidaMemberNumber: '',
     patientIodClaimNumber: '',
@@ -907,7 +905,6 @@ export default function COIDAFormScreen() {
         `ICD10 Code: ${updatedFormData.icd10Code || 'N/A'}\n` +
         `Procedures: ${proceduresList}\n` +
         `Date of Procedure: ${updatedFormData.dateOfProcedure}\n` +
-        `Theatre Time Witness: ${updatedFormData.theatreTimeWitness || 'N/A'}\n` +
         `Fixed Installation: ${updatedFormData.fixedInstallation || 'N/A'}\n\n` +
         `Time In Theatre: ${updatedFormData.timeInTheatre}\n` +
         `Time Out Theatre: ${updatedFormData.timeOutTheatre}\n` +
@@ -1821,17 +1818,6 @@ export default function COIDAFormScreen() {
               placeholder="Enter time (e.g., 16H45)"
               keyboardType="numeric"
               maxLength={5}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Theatre Time Witness</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.theatreTimeWitness}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, theatreTimeWitness: value }))}
-              placeholder="Enter theatre time witness name"
               editable={!isReadOnly}
             />
           </View>

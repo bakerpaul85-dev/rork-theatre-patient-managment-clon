@@ -32,8 +32,7 @@ export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]
     `Dependant Code: ${form.dependantCode || ''}\n\n` +
     `Procedure: ${form.procedure || ''}\n` +
     `ICD10 Code: ${form.icd10Code || ''}\n` +
-    `Number of Sessions: ${((form as any).numberOfSessions) || ''}\n` +
-    `Theatre Time Witness: ${(form as any).theatreTimeWitness || 'N/A'}\n\n` +
+    `Number of Sessions: ${((form as any).numberOfSessions) || ''}\n\n` +
     `C-Arm Owned by Hospital: ${((form as any).cArmOwnedByHospital) || ''}\n` +
     `Contrast Usage: ${((form as any).contrastUsage) || ''}\n` +
     ((form as any).contrastName ? `Contrast Name: ${(form as any).contrastName}\n` : '') +
@@ -86,7 +85,6 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `ICD10 Code: ${form.icd10Code || 'N/A'}\n` +
     `Procedures: ${proceduresList}\n` +
     `Date of Procedure: ${coidaForm.dateOfProcedure || ''}\n` +
-    `Theatre Time Witness: ${coidaForm.theatreTimeWitness || 'N/A'}\n` +
     `Fixed Installation: ${coidaForm.fixedInstallation || 'N/A'}\n\n` +
     `Time In Theatre: ${coidaForm.timeInTheatre || ''}\n` +
     `Time Out Theatre: ${coidaForm.timeOutTheatre || ''}\n` +
