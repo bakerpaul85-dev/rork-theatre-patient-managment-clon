@@ -134,6 +134,7 @@ Rules:
 - South African ID numbers: extract exactly as shown (13 digits).
 - Dates: convert to DD/MM/YYYY for dateOfBirth, DDMMYYYY for admissionDate.
 - Times: convert to HHMM (24h) for admissionTime.
+- Phone numbers: extract the digits after the label. The label "WK" or "Work" means the patient's work number → put in workPhone. The label "HM" or "Home" or "H" means the patient's home/mobile number → put in homePhone. If the sticker has only one phone number with no label, put it in contactNumber.
 - If a field is a label on the sticker with no value, leave it empty.
 - If the main member is the same as the patient, still fill in main member fields.
 - Return ONLY the JSON, no other text.`;
@@ -260,15 +261,15 @@ export const normalizeStickerData = (data: ExtractedStickerData): Partial<Record
   if (data.patientLastName) result.patientLastName = data.patientLastName;
   if (data.idNumber) result.idNumber = data.idNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
   if (data.dateOfBirth) result.dateOfBirth = data.dateOfBirth;
-  if (data.contactNumber) result.contactNumber = data.contactNumber;
+  if (data.contactNumber) result.contactNumber = data.contactNumber.replace(/\D/g, '');
   if (data.email) result.email = data.email;
   if (data.gender) {
     const match = validGenders.find(g => g.toLowerCase() === data.gender?.toLowerCase());
     if (match) result.gender = match;
   }
   if (data.patientAddress) result.patientAddress = data.patientAddress;
-  if (data.homePhone) result.homePhone = data.homePhone;
-  if (data.workPhone) result.workPhone = data.workPhone;
+  if (data.homePhone) result.homePhone = data.homePhone.replace(/\D/g, '');
+  if (data.workPhone) result.workPhone = data.workPhone.replace(/\D/g, '');
   if (data.ward) result.ward = data.ward;
   if (data.bed) result.bed = data.bed;
   if (data.admissionDate) result.admissionDate = data.admissionDate.replace(/\D/g, '');
