@@ -26,6 +26,7 @@ import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { extractStickerData, normalizeStickerData } from '@/utils/stickerOCR';
+import PrivacyNotice from '@/components/PrivacyNotice';
 
 
 type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
@@ -77,6 +78,8 @@ interface FormData {
   contrastAmount: string;
   radiographerName: string;
   radiographerSignatureTimestamp: string;
+  patientConsentGiven?: boolean;
+  patientConsentTimestamp?: string;
   radiographerSignatureLocation: string;
 }
 
@@ -441,6 +444,7 @@ export default function MedicalAidFormScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
   const [showCamera, setShowCamera] = useState(false);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>(null);
   const [cameraRef, setCameraRef] = useState<any>(null);
   const [isExtractingSticker, setIsExtractingSticker] = useState<boolean>(false);
@@ -520,6 +524,8 @@ export default function MedicalAidFormScreen() {
     contrastAmount: '',
     radiographerName: user?.name || 'Dr. Smith',
     radiographerSignatureTimestamp: '',
+    patientConsentGiven: false,
+    patientConsentTimestamp: '',
     radiographerSignatureLocation: '',
   });
 
@@ -911,6 +917,14 @@ export default function MedicalAidFormScreen() {
       return;
     }
 
+    if (!formData.patientConsentGiven) {
+      Alert.alert(
+        'POPIA Consent Required',
+        'Patient consent must be confirmed before submitting. Please review the Privacy Notice and tick the consent box.'
+      );
+      return;
+    }
+
     if (!locationPermission?.granted) {
       const result = await requestLocationPermission();
       if (!result.granted) {
@@ -926,6 +940,7 @@ export default function MedicalAidFormScreen() {
       const updatedFormData = {
         ...formData,
         radiographerSignatureTimestamp: timestamp,
+        patientConsentTimestamp: timestamp,
         radiographerSignatureLocation: `${location.coords.latitude}, ${location.coords.longitude}`,
         submissionLatitude: location.coords.latitude,
         submissionLongitude: location.coords.longitude,
@@ -981,6 +996,7 @@ export default function MedicalAidFormScreen() {
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
+        `POPIA Consent: Obtained (${new Date(timestamp).toLocaleString()})\n` +
         (updatedFormData.submissionLatitude && updatedFormData.submissionLongitude
           ? `Location: ${updatedFormData.radiographerSignatureLocation} — https://maps.google.com/?q=${updatedFormData.submissionLatitude},${updatedFormData.submissionLongitude}\n\n`
           : `Location: ${updatedFormData.radiographerSignatureLocation}\n\n`) +
@@ -1153,6 +1169,10 @@ export default function MedicalAidFormScreen() {
           
           <View style={styles.photoField}>
             <Text style={styles.label}>Hospital Sticker Photo *</Text>
+            <Text style={styles.aiDisclosure}>
+              Photos are analysed by an automated AI service to pre-fill form fields and are
+              transmitted over an encrypted connection. See the Privacy Notice.
+            </Text>
             {formData.hospitalStickerPhoto ? (
               <View style={styles.photoPreview}>
                 <Image source={{ uri: formData.hospitalStickerPhoto }} style={styles.photoImage} />
@@ -1804,6 +1824,28 @@ export default function MedicalAidFormScreen() {
             />
           </View>
 
+          <View style={styles.field}>
+            <Text style={styles.label}>Patient Consent (POPIA) *</Text>
+            <TouchableOpacity
+              style={styles.consentRow}
+              disabled={isReadOnly}
+              onPress={() => setFormData(prev => ({ ...prev, patientConsentGiven: !prev.patientConsentGiven }))}
+            >
+              <View style={[styles.consentCheckbox, formData.patientConsentGiven && styles.consentCheckboxChecked]}>
+                {formData.patientConsentGiven && <Check size={16} color="#FFFFFF" />}
+              </View>
+              <Text style={styles.consentText}>
+                The patient has received the Privacy Notice and gives informed consent for the
+                collection and processing of their personal and health information in terms of
+                POPIA, and for it to be shared with the medical scheme, referring practitioner
+                and billing parties for claim purposes.
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowPrivacyNotice(true)}>
+              <Text style={styles.privacyLink}>Read the full Privacy Notice</Text>
+            </TouchableOpacity>
+          </View>
+
           {formData.radiographerSignatureTimestamp && (
             <>
               <View style={styles.signatureInfo}>
@@ -1836,6 +1878,8 @@ export default function MedicalAidFormScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <PrivacyNotice visible={showPrivacyNotice} onClose={() => setShowPrivacyNotice(false)} />
     </>
   );
 }
@@ -1971,6 +2015,45 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600' as const,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  consentCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#0066CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  consentCheckboxChecked: {
+    backgroundColor: '#0066CC',
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#333333',
+  },
+  privacyLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0066CC',
+    marginTop: 6,
+    textDecorationLine: 'underline',
+  },
+  aiDisclosure: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#777777',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   signatureInfo: {
     flexDirection: 'row',

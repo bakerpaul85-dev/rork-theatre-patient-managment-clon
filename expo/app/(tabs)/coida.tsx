@@ -24,6 +24,7 @@ import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { generateClaimSpreadsheet } from '@/utils/excelGenerator';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import DocumentScanner from '@/components/DocumentScanner';
+import PrivacyNotice from '@/components/PrivacyNotice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { extractStickerData, normalizeStickerData, extractReferralData, normalizeReferralData, extractClockTime } from '@/utils/stickerOCR';
 import { findRadiographerByEmail, RADIOGRAPHERS } from '@/constants/radiographers';
@@ -89,6 +90,8 @@ interface COIDAFormData {
   icd10Code: string;
   radiographerName: string;
   radiographerSignatureTimestamp: string;
+  patientConsentGiven?: boolean;
+  patientConsentTimestamp?: string;
   radiographerSignatureLocation: string;
 }
 
@@ -159,6 +162,7 @@ export default function COIDAFormScreen() {
   const navigation = useNavigation();
   const hasUnsavedChangesRef = useRef<boolean>(false);
   const [showProcedurePicker, setShowProcedurePicker] = useState(false);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
   const [procedureSearch, setProcedureSearch] = useState('');
   const [showDocumentScanner, setShowDocumentScanner] = useState(false);
 
@@ -319,6 +323,8 @@ export default function COIDAFormScreen() {
     icd10Code: '',
     radiographerName: user?.name || 'Dr. Smith',
     radiographerSignatureTimestamp: '',
+    patientConsentGiven: false,
+    patientConsentTimestamp: '',
     radiographerSignatureLocation: '',
   });
 
@@ -988,6 +994,14 @@ export default function COIDAFormScreen() {
       return;
     }
 
+    if (!formData.patientConsentGiven) {
+      Alert.alert(
+        'POPIA Consent Required',
+        'Patient consent must be confirmed before submitting. Please review the Privacy Notice and tick the consent box.'
+      );
+      return;
+    }
+
     if (!locationPermission?.granted) {
       const result = await requestLocationPermission();
       if (!result.granted) {
@@ -1005,6 +1019,7 @@ export default function COIDAFormScreen() {
       const updatedFormData = {
         ...formData,
         radiographerSignatureTimestamp: timestamp,
+        patientConsentTimestamp: timestamp,
         radiographerSignatureLocation: `${location.coords.latitude}, ${location.coords.longitude}`,
         submissionLatitude: location.coords.latitude,
         submissionLongitude: location.coords.longitude,
@@ -1062,6 +1077,7 @@ export default function COIDAFormScreen() {
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Billing Practice: ${radiographerRecord?.prefix || radiographerRecord?.name || 'N/A'}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
+        `POPIA Consent: Obtained (${new Date(timestamp).toLocaleString()})\n` +
         (updatedFormData.submissionLatitude && updatedFormData.submissionLongitude
           ? `Location: ${updatedFormData.radiographerSignatureLocation} — https://maps.google.com/?q=${updatedFormData.submissionLatitude},${updatedFormData.submissionLongitude}\n\n`
           : `Location: ${updatedFormData.radiographerSignatureLocation}\n\n`) +
@@ -1417,6 +1433,10 @@ export default function COIDAFormScreen() {
           
           <View style={styles.photoField}>
             <Text style={styles.label}>Hospital Sticker Photo *</Text>
+            <Text style={styles.aiDisclosure}>
+              Photos are analysed by an automated AI service to pre-fill form fields and are
+              transmitted over an encrypted connection. See the Privacy Notice.
+            </Text>
             {formData.hospitalStickerPhoto ? (
               <View style={styles.photoPreview}>
                 <Image source={{ uri: formData.hospitalStickerPhoto }} style={styles.photoImage} />
@@ -1884,7 +1904,7 @@ export default function COIDAFormScreen() {
 
           <View style={styles.photoField}>
             <Text style={styles.label}>Photo of Referral Letter</Text>
-            <Text style={styles.labelSubtitle}>Document will be automatically enhanced and converted to PDF</Text>
+            <Text style={styles.labelSubtitle}>Document will be automatically enhanced and converted to PDF. Scanned pages are analysed by an automated AI service to pre-fill form fields (see Privacy Notice).</Text>
             {isExtractingReferral && (
               <View style={styles.ocrLoadingBadge}>
                 <ActivityIndicator size="small" color="#00A3A3" />
@@ -1969,6 +1989,28 @@ export default function COIDAFormScreen() {
             />
           </View>
 
+          <View style={styles.field}>
+            <Text style={styles.label}>Patient Consent (POPIA) *</Text>
+            <TouchableOpacity
+              style={styles.consentRow}
+              disabled={isReadOnly}
+              onPress={() => setFormData(prev => ({ ...prev, patientConsentGiven: !prev.patientConsentGiven }))}
+            >
+              <View style={[styles.consentCheckbox, formData.patientConsentGiven && styles.consentCheckboxChecked]}>
+                {formData.patientConsentGiven && <Check size={16} color="#FFFFFF" />}
+              </View>
+              <Text style={styles.consentText}>
+                The patient has received the Privacy Notice and gives informed consent for the
+                collection and processing of their personal and health information in terms of
+                POPIA, and for it to be shared with COIDA, the referring practitioner and
+                billing parties for claim purposes.
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowPrivacyNotice(true)}>
+              <Text style={styles.privacyLink}>Read the full Privacy Notice</Text>
+            </TouchableOpacity>
+          </View>
+
           {formData.radiographerSignatureTimestamp && (
             <>
               <View style={styles.signatureInfo}>
@@ -2020,6 +2062,8 @@ export default function COIDAFormScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <PrivacyNotice visible={showPrivacyNotice} onClose={() => setShowPrivacyNotice(false)} />
 
       <Modal
         visible={showProcedurePicker}
@@ -2450,6 +2494,45 @@ const styles = StyleSheet.create({
     color: '#00A3A3',
     marginBottom: 8,
     textAlign: 'center' as const,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  consentCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#00A3A3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  consentCheckboxChecked: {
+    backgroundColor: '#00A3A3',
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#333333',
+  },
+  privacyLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#00A3A3',
+    marginTop: 6,
+    textDecorationLine: 'underline',
+  },
+  aiDisclosure: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#777777',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   signatureInfo: {
     flexDirection: 'row',

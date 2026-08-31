@@ -83,6 +83,8 @@ export interface FormData {
   radiographerSignatureLocation: string;
   submissionLatitude?: number;
   submissionLongitude?: number;
+  patientConsentGiven?: boolean;
+  patientConsentTimestamp?: string;
   status: 'draft' | 'submitted';
   airtableRecordId?: string;
   airtableBaseId?: string;
@@ -519,6 +521,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'numberOfSessions', 'cArmOwnedByHospital', 'contrastUsage', 'contrastName', 'contrastAmount',
         'radiographerName', 'radiographerSignatureTimestamp', 'radiographerSignatureLocation',
         'submissionLatitude', 'submissionLongitude',
+        'patientConsentGiven', 'patientConsentTimestamp',
         'cArmImagesCount', 'employerReportPhotosCount', 'attachmentPhotosCount',
         'hospitalStickerPhotoMetadata', 'timeInTheatrePhotoMetadata', 'timeOutTheatrePhotoMetadata',
         'airtableRecordId', 'airtableBaseId', 'airtableTableId',
