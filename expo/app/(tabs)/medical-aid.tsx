@@ -528,6 +528,35 @@ export default function MedicalAidFormScreen() {
 
   const isReadOnly = formData.radiographerSignatureTimestamp !== '';
 
+  // Refs mirroring state so async AI callbacks can merge/save without stale closures
+  const formDataRef = useRef<FormData>(formData);
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+  const currentFormIdRef = useRef<string | null>(currentFormId);
+  useEffect(() => { currentFormIdRef.current = currentFormId; }, [currentFormId]);
+
+  /**
+   * Silently persist the current (or provided) form data as a draft.
+   * Used after AI auto-population events.
+   */
+  const autoSaveDraft = async (overrideData?: FormData) => {
+    if (isReadOnly) return;
+    try {
+      const dataToSave = overrideData ?? formDataRef.current;
+      if (currentFormIdRef.current) {
+        await updateDraft(currentFormIdRef.current, dataToSave as any);
+      } else {
+        const draftData = isFromWorklist ? { ...dataToSave, caseStatus: 'case_started' as const } : dataToSave;
+        const newFormId = await saveDraft(draftData as any);
+        currentFormIdRef.current = newFormId;
+        setCurrentFormId(newFormId);
+      }
+      hasUnsavedChangesRef.current = false;
+      console.log('[MedicalAid] Draft auto-saved');
+    } catch (error) {
+      console.error('[MedicalAid] Auto-save failed:', error);
+    }
+  };
+
   useEffect(() => {
     if (params.formId && typeof params.formId === 'string') {
       const existingForm = getForm(params.formId);
@@ -767,11 +796,19 @@ export default function MedicalAidFormScreen() {
                 const extracted = await extractStickerData(photoUri);
                 const normalized = normalizeStickerData(extracted);
                 const filledFields = Object.keys(normalized);
+                const merged = {
+                  ...formDataRef.current,
+                  hospitalStickerPhoto: photoUri,
+                  hospitalStickerPhotoMetadata: metadata,
+                  ...normalized,
+                } as FormData;
+                setFormData(merged);
                 if (filledFields.length > 0) {
-                  setFormData(prev => ({ ...prev, ...normalized }));
                   setStickerExtractedFields(filledFields);
                   console.log('[StickerOCR] Auto-filled fields:', filledFields.join(', '));
                 }
+                // Auto-save draft once AI has finished populating the form
+                await autoSaveDraft(merged);
               } catch (ocrError) {
                 console.error('[StickerOCR] Extraction failed:', ocrError);
               } finally {

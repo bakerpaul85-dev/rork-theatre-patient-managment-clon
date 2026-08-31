@@ -25,7 +25,8 @@ import { generateClaimSpreadsheet } from '@/utils/excelGenerator';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import DocumentScanner from '@/components/DocumentScanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { extractStickerData, normalizeStickerData } from '@/utils/stickerOCR';
+import { extractStickerData, normalizeStickerData, extractReferralData, normalizeReferralData, extractClockTime } from '@/utils/stickerOCR';
+import { findRadiographerByEmail, RADIOGRAPHERS } from '@/constants/radiographers';
 
 
 
@@ -38,6 +39,8 @@ interface COIDAFormData {
   formType: 'medical-aid' | 'coida';
   hospitalStickerPhoto: string | null;
   hospitalStickerPhotoMetadata?: PhotoMetadata;
+  hospitalName: string;
+  radiographerEmail?: string;
   date: string;
   dateOfProcedure: string;
   timeInTheatreClockPhoto: string | null;
@@ -275,6 +278,8 @@ export default function COIDAFormScreen() {
   const getInitialFormData = (): COIDAFormData => ({
     formType: 'coida',
     hospitalStickerPhoto: null,
+    hospitalName: '',
+    radiographerEmail: user?.email || '',
     date: formatDateToDDMMYYYY(new Date()),
     dateOfProcedure: formatDateToDDMMYYYY(new Date()),
     timeInTheatreClockPhoto: null,
@@ -320,8 +325,70 @@ export default function COIDAFormScreen() {
   const [formData, setFormData] = useState<COIDAFormData>(getInitialFormData());
   const [isExtractingSticker, setIsExtractingSticker] = useState<boolean>(false);
   const [stickerExtractedFields, setStickerExtractedFields] = useState<string[]>([]);
+  const [isExtractingClockIn, setIsExtractingClockIn] = useState<boolean>(false);
+  const [isExtractingClockOut, setIsExtractingClockOut] = useState<boolean>(false);
+  const [isExtractingReferral, setIsExtractingReferral] = useState<boolean>(false);
+  const [referralExtractedFields, setReferralExtractedFields] = useState<string[]>([]);
 
   const isReadOnly = formData.radiographerSignatureTimestamp !== '';
+
+  // Refs mirroring state so async AI callbacks can merge/save without stale closures
+  const formDataRef = useRef<COIDAFormData>(formData);
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+  const currentFormIdRef = useRef<string | null>(currentFormId);
+  useEffect(() => { currentFormIdRef.current = currentFormId; }, [currentFormId]);
+
+  /**
+   * Silently persist the current (or provided) form data as a draft.
+   * Used after AI auto-population and key capture events.
+   */
+  const autoSaveDraft = async (overrideData?: COIDAFormData) => {
+    if (isReadOnly) return;
+    try {
+      const dataToSave = { ...(overrideData ?? formDataRef.current) } as COIDAFormData;
+      delete (dataToSave as any).dicomFiles;
+      if (currentFormIdRef.current) {
+        await updateDraft(currentFormIdRef.current, dataToSave as any);
+      } else {
+        const draftData = isFromWorklist ? { ...dataToSave, caseStatus: 'case_started' as const } : dataToSave;
+        const newFormId = await saveDraft(draftData as any);
+        currentFormIdRef.current = newFormId;
+        setCurrentFormId(newFormId);
+      }
+      hasUnsavedChangesRef.current = false;
+      console.log('[COIDA] Draft auto-saved');
+    } catch (error) {
+      console.error('[COIDA] Auto-save failed:', error);
+    }
+  };
+
+  /**
+ * Map AI-extracted procedure strings to the canonical "CODE Name" entries
+   * used by the form's procedure list.
+   */
+  const normalizeProcedureEntries = (rawProcedures: unknown): string[] => {
+    if (!Array.isArray(rawProcedures)) return [];
+    const mapped: string[] = [];
+    for (const item of rawProcedures) {
+      const procStr = String(item ?? '').trim();
+      if (!procStr) continue;
+      const codeMatch = procStr.match(/^(\d{4,5})\b/);
+      if (codeMatch) {
+        const option = PROCEDURE_OPTIONS.find(o => o.code === codeMatch[1]);
+        if (option) {
+          mapped.push(`${option.code} ${option.name}`);
+          continue;
+        }
+      }
+      const nameMatch = PROCEDURE_OPTIONS.find(o => procStr.toLowerCase().includes(o.name.toLowerCase()));
+      if (nameMatch) {
+        mapped.push(`${nameMatch.code} ${nameMatch.name}`);
+        continue;
+      }
+      mapped.push(procStr);
+    }
+    return Array.from(new Set(mapped));
+  };
 
   useEffect(() => {
     if (params.formId && typeof params.formId === 'string') {
@@ -559,11 +626,19 @@ export default function COIDAFormScreen() {
               const extracted = await extractStickerData(photoUri);
               const normalized = normalizeStickerData(extracted);
               const filledFields = Object.keys(normalized);
+              const merged = {
+                ...formDataRef.current,
+                hospitalStickerPhoto: photoUri,
+                hospitalStickerPhotoMetadata: photoMetadata,
+                ...normalized,
+              } as COIDAFormData;
+              setFormData(merged);
               if (filledFields.length > 0) {
-                setFormData(prev => ({ ...prev, ...normalized }));
                 setStickerExtractedFields(filledFields);
                 console.log('[StickerOCR] COIDA auto-filled fields:', filledFields.join(', '));
               }
+              // Auto-save draft once AI has finished populating the form
+              await autoSaveDraft(merged);
             } catch (ocrError) {
               console.error('[StickerOCR] COIDA extraction failed:', ocrError);
             } finally {
@@ -571,14 +646,35 @@ export default function COIDAFormScreen() {
             }
           })();
           break;
-        case 'timeInTheatreClock':
+        case 'timeInTheatreClock': {
           console.log('Setting time in theatre clock photo');
           setFormData(prev => ({ 
             ...prev, 
             timeInTheatreClockPhoto: photoUri,
             timeInTheatreClockPhotoMetadata: photoMetadata,
           }));
+          void (async () => {
+            setIsExtractingClockIn(true);
+            try {
+              const clockTime = await extractClockTime(photoUri);
+              if (clockTime) {
+                const merged = {
+                  ...formDataRef.current,
+                  timeInTheatreClockPhoto: photoUri,
+                  timeInTheatreClockPhotoMetadata: photoMetadata,
+                  timeInTheatre: clockTime,
+                } as COIDAFormData;
+                setFormData(merged);
+                console.log('[ClockOCR] Time in theatre auto-filled:', clockTime);
+              }
+            } catch (clockError) {
+              console.error('[ClockOCR] Time in theatre extraction failed:', clockError);
+            } finally {
+              setIsExtractingClockIn(false);
+            }
+          })();
           break;
+        }
         case 'cArmImage':
           console.log('Adding C arm image');
           setFormData(prev => ({ 
@@ -594,14 +690,44 @@ export default function COIDAFormScreen() {
             screeningTimePhotoMetadata: photoMetadata,
           }));
           break;
-        case 'timeOutTheatreClock':
+        case 'timeOutTheatreClock': {
           console.log('Setting time out theatre clock photo');
           setFormData(prev => ({ 
             ...prev, 
             timeOutTheatreClockPhoto: photoUri,
             timeOutTheatreClockPhotoMetadata: photoMetadata,
           }));
+          void (async () => {
+            setIsExtractingClockOut(true);
+            let merged: COIDAFormData | null = null;
+            try {
+              const clockTime = await extractClockTime(photoUri);
+              merged = {
+                ...formDataRef.current,
+                timeOutTheatreClockPhoto: photoUri,
+                timeOutTheatreClockPhotoMetadata: photoMetadata,
+                ...(clockTime ? { timeOutTheatre: clockTime } : {}),
+              } as COIDAFormData;
+              setFormData(merged);
+              if (clockTime) {
+                console.log('[ClockOCR] Time out theatre auto-filled:', clockTime);
+              }
+            } catch (clockError) {
+              console.error('[ClockOCR] Time out theatre extraction failed:', clockError);
+              merged = {
+                ...formDataRef.current,
+                timeOutTheatreClockPhoto: photoUri,
+                timeOutTheatreClockPhotoMetadata: photoMetadata,
+              } as COIDAFormData;
+              setFormData(merged);
+            } finally {
+              setIsExtractingClockOut(false);
+              // Auto-save draft once Time Out of Theatre is captured
+              if (merged) await autoSaveDraft(merged);
+            }
+          })();
           break;
+        }
         case 'employerReport':
           console.log('Adding employer report photo');
           setFormData(prev => ({ 
@@ -625,10 +751,11 @@ export default function COIDAFormScreen() {
             patientIdPhotoMetadata: photoMetadata,
           }));
           break;
-        case 'referralLetter':
+        case 'referralLetter': {
           console.log('Setting referral letter photo');
           console.log('Processing as scanned document...');
-          
+
+          let pageUri = photoUri;
           try {
             // Compress image AGGRESSIVELY to prevent database overflow
             const compressedImage = await ImageManipulator.manipulateAsync(
@@ -636,41 +763,60 @@ export default function COIDAFormScreen() {
               [{ resize: { width: 800 } }],  // Reduced from 1200 to 800
               { compress: 0.3, format: ImageManipulator.SaveFormat.JPEG, base64: true }  // Reduced from 0.6 to 0.3
             );
-            
+
             if (!compressedImage.base64) {
               throw new Error('Failed to compress image');
             }
-            
-            const compressedUri = `data:image/jpeg;base64,${compressedImage.base64}`;
-            
-            if (Platform.OS === 'web') {
-              // Store ONLY the image, not the PDF to save storage
-              console.log('Scanned document compressed');
-              console.log('Original size:', photoUri.length, 'Compressed size:', compressedUri.length);
-              
-              setFormData(prev => ({ 
-                ...prev, 
-                referralLetterPages: [...prev.referralLetterPages, { uri: compressedUri, metadata: photoMetadata }],
-                // Don't store PDF in form data - it will be generated fresh during submission
-                referralLetterPDF: undefined,
-              }));
-              
-              Alert.alert('Success', 'Referral letter page added');
-            } else {
-              console.log('Adding referral letter page (JPEG) - native platform');
-              setFormData(prev => ({ 
-                ...prev, 
-                referralLetterPages: [...prev.referralLetterPages, { uri: compressedUri, metadata: photoMetadata }],
-              }));
-              
-              Alert.alert('Success', 'Referral letter page added');
-            }
+
+            pageUri = `data:image/jpeg;base64,${compressedImage.base64}`;
+            console.log('Original size:', photoUri.length, 'Compressed size:', pageUri.length);
           } catch (error) {
             console.error('Error processing scanned document:', error);
             Alert.alert('Error', `Failed to process referral letter: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or submit your current draft first to free up storage.`);
+            break;
           }
 
+          // Don't store PDF in form data - it will be generated fresh during submission
+          setFormData(prev => ({ 
+            ...prev, 
+            referralLetterPages: [...prev.referralLetterPages, { uri: pageUri, metadata: photoMetadata }],
+            referralLetterPDF: undefined,
+          }));
+
+          void (async () => {
+            setIsExtractingReferral(true);
+            let merged: COIDAFormData | null = null;
+            try {
+              const extracted = await extractReferralData(pageUri);
+              const normalized = normalizeReferralData(extracted);
+              const filledFields = Object.keys(normalized);
+              const procedures = normalizeProcedureEntries(normalized.procedures);
+              merged = {
+                ...formDataRef.current,
+                referralLetterPages: [...formDataRef.current.referralLetterPages, { uri: pageUri, metadata: photoMetadata }],
+                ...normalized,
+                ...(procedures.length > 0 ? { procedure: procedures } : {}),
+              } as COIDAFormData;
+              setFormData(merged);
+              if (filledFields.length > 0) {
+                setReferralExtractedFields(filledFields);
+                console.log('[ReferralOCR] COIDA auto-filled fields:', filledFields.join(', '));
+              }
+            } catch (ocrError) {
+              console.error('[ReferralOCR] extraction failed:', ocrError);
+              merged = {
+                ...formDataRef.current,
+                referralLetterPages: [...formDataRef.current.referralLetterPages, { uri: pageUri, metadata: photoMetadata }],
+              } as COIDAFormData;
+            } finally {
+              setIsExtractingReferral(false);
+              // Auto-save draft once the referral letter has been scanned
+              if (merged) await autoSaveDraft(merged);
+            }
+          })();
+
           break;
+        }
         case 'attachment':
           console.log('Adding attachment photo');
           setFormData(prev => ({ 
@@ -883,6 +1029,8 @@ export default function COIDAFormScreen() {
 
       const patientName = `${updatedFormData.patientTitle} ${updatedFormData.patientFirstName} ${updatedFormData.patientLastName}`.trim();
       const proceduresList = Array.isArray(updatedFormData.procedure) ? updatedFormData.procedure.join(', ') : String(updatedFormData.procedure);
+      const radiographerRecord = findRadiographerByEmail(updatedFormData.radiographerEmail || '')
+        || RADIOGRAPHERS.find(r => r.name.toLowerCase() === updatedFormData.radiographerName.toLowerCase());
       const subject = `COIDA Form - ${patientName}`;
       const body =
         `COIDA Form Submission\n\n` +
@@ -896,7 +1044,8 @@ export default function COIDAFormScreen() {
         `Email: ${updatedFormData.email}\n` +
         `Patient Address: ${updatedFormData.patientAddress || 'N/A'}\n\n` +
         `Admission Date: ${updatedFormData.admissionDate || 'N/A'}\n` +
-        `Admission Time: ${updatedFormData.admissionTime || 'N/A'}\n\n` +
+        `Admission Time: ${updatedFormData.admissionTime || 'N/A'}\n` +
+        `Hospital Name: ${updatedFormData.hospitalName || 'N/A'}\n\n` +
         `COIDA Number: ${updatedFormData.coidaMemberNumber}\n` +
         `IOD Claim Number: ${updatedFormData.patientIodClaimNumber}\n` +
         `Employer: ${updatedFormData.employerName}\n` +
@@ -908,9 +1057,10 @@ export default function COIDAFormScreen() {
         `Fixed Installation: ${updatedFormData.fixedInstallation || 'N/A'}\n\n` +
         `Time In Theatre: ${updatedFormData.timeInTheatre}\n` +
         `Time Out Theatre: ${updatedFormData.timeOutTheatre}\n` +
-        `Screening Time: ${((): string => { const t = String(updatedFormData.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
+        `Screening Time: ${((): string => { const t = String(updatedFormData.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) { const [m, s] = t.split(':'); return String((parseInt(m, 10) || 0) * 60 + (parseInt(s, 10) || 0)); } return t; })()} (seconds)\n` +
         `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
+        `Billing Practice: ${radiographerRecord?.prefix || radiographerRecord?.name || 'N/A'}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
         (updatedFormData.submissionLatitude && updatedFormData.submissionLongitude
           ? `Location: ${updatedFormData.radiographerSignatureLocation} — https://maps.google.com/?q=${updatedFormData.submissionLatitude},${updatedFormData.submissionLongitude}\n\n`
@@ -1104,6 +1254,7 @@ export default function COIDAFormScreen() {
               referringDoctor: '',
               referringDoctorContact: '',
               authorisationNumber: '',
+              radiographerEmail: updatedFormData.radiographerEmail || user?.email || '',
               status: 'submitted' as const,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -1369,274 +1520,6 @@ export default function COIDAFormScreen() {
             />
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Date of Birth</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.dateOfBirth}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, dateOfBirth: value }))}
-              placeholder="DD/MM/YYYY (auto-filled for SA ID)"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Contact Number</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.contactNumber}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, contactNumber: value }))}
-              placeholder="Enter contact number"
-              keyboardType="phone-pad"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.email}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, email: value }))}
-              placeholder="Enter email address"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Gender</Text>
-            <View style={styles.titleContainer}>
-              {['Male', 'Female', 'Other'].map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.titleButton,
-                    formData.gender === option && styles.titleButtonActive,
-                  ]}
-                  onPress={() => setFormData(prev => ({ ...prev, gender: option }))}
-                  disabled={isReadOnly}
-                >
-                  <Text
-                    style={[
-                      styles.titleButtonText,
-                      formData.gender === option && styles.titleButtonTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Patient Address</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.patientAddress}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, patientAddress: value }))}
-              placeholder="Enter patient address as on sticker"
-              multiline
-              numberOfLines={2}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Home Phone</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.homePhone}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, homePhone: value }))}
-              placeholder="Enter home telephone"
-              keyboardType="phone-pad"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Work Phone</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.workPhone}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, workPhone: value }))}
-              placeholder="Enter work telephone"
-              keyboardType="phone-pad"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Coida Number *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.coidaMemberNumber}
-              onChangeText={(value) => handleNumericInput('coidaMemberNumber', value)}
-              placeholder="Enter Coida number"
-              keyboardType="numeric"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Patient IOD Claim Number</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.patientIodClaimNumber}
-              onChangeText={(value) => handleNumericInput('patientIodClaimNumber', value)}
-              placeholder="Enter Patient IOD claim number"
-              keyboardType="numeric"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Employer Name</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.employerName}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, employerName: value }))}
-              placeholder="Enter employer name"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Employer Contact</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.employerContact}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, employerContact: value }))}
-              placeholder="Enter employer contact"
-              keyboardType="phone-pad"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Date of Incident</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.dateOfIncident}
-              onChangeText={(value) => setFormData(prev => ({ ...prev, dateOfIncident: value }))}
-              placeholder="Enter date of incident (DD/MM/YYYY)"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Procedures * (Multi-select)</Text>
-            <TouchableOpacity
-              style={styles.pickerButton}
-              onPress={() => !isReadOnly && setShowProcedurePicker(true)}
-              disabled={isReadOnly}
-            >
-              <Text style={[styles.pickerButtonText, formData.procedure.length === 0 && styles.pickerPlaceholder]}>
-                {formData.procedure.length > 0 ? `${formData.procedure.length} procedure${formData.procedure.length > 1 ? 's' : ''} selected` : 'Select procedures'}
-              </Text>
-              <ChevronDown size={20} color="#666" />
-            </TouchableOpacity>
-            {formData.procedure.length > 0 && (
-              <View style={styles.selectedProceduresContainer}>
-                {formData.procedure.map((proc, index) => (
-                  <View key={index} style={styles.selectedProcedureTag}>
-                    <Text style={styles.selectedProcedureText} numberOfLines={1}>{proc}</Text>
-                    {!isReadOnly && (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            procedure: prev.procedure.filter((_, i) => i !== index)
-                          }));
-                        }}
-                        style={styles.removeProcedureButton}
-                      >
-                        <X size={14} color="#00A3A3" />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Date of Procedure *</Text>
-            <TouchableOpacity
-              style={styles.datePickerButton}
-              onPress={() => {
-                if (isReadOnly) return;
-                const parts = formData.dateOfProcedure.split('/');
-                if (parts.length === 3) {
-                  const d = parseInt(parts[0], 10);
-                  const m = parseInt(parts[1], 10) - 1;
-                  const y = parseInt(parts[2], 10);
-                  const parsed = new Date(y, m, d);
-                  if (!isNaN(parsed.getTime())) {
-                    setCalendarViewDate(new Date(y, m, 1));
-                    setSelectedCalendarDay(d);
-                  } else {
-                    setCalendarViewDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-                    setSelectedCalendarDay(new Date().getDate());
-                  }
-                } else {
-                  setCalendarViewDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-                  setSelectedCalendarDay(new Date().getDate());
-                }
-                setShowDateOfProcedurePicker(true);
-              }}
-              disabled={isReadOnly}
-            >
-              <Text style={[styles.datePickerButtonText, !formData.dateOfProcedure && styles.pickerPlaceholder]}>
-                {formData.dateOfProcedure || 'Select date'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Hospital Information</Text>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Admission Date</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.admissionDate}
-              onChangeText={(value) => {
-                const numericValue = value.replace(/\D/g, '');
-                setFormData(prev => ({ ...prev, admissionDate: numericValue }));
-              }}
-              placeholder="DDMMYYYY"
-              keyboardType="numeric"
-              maxLength={8}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Admission Time</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.admissionTime}
-              onChangeText={(value) => handleTimeInput('admissionTime', value)}
-              placeholder="Enter time (e.g., 07H30)"
-              keyboardType="numeric"
-              maxLength={5}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Date of Capture/Report *</Text>
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={formData.date}
-              editable={false}
-              placeholder="Auto-set on submission"
-            />
-          </View>
         </View>
 
         <View style={styles.section}>
@@ -1663,6 +1546,12 @@ export default function COIDAFormScreen() {
                   <View style={styles.gpsBadge}>
                     <MapPin size={12} color="#28A745" />
                     <Text style={styles.gpsText}>{formData.timeInTheatreClockPhotoMetadata.latitude.toFixed(6)}, {formData.timeInTheatreClockPhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingClockIn && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#00A3A3" />
+                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
                   </View>
                 )}
                 <TouchableOpacity
@@ -1765,15 +1654,16 @@ export default function COIDAFormScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Screening Time (min:sec) *</Text>
+            <Text style={styles.label}>Screening Time (seconds) *</Text>
             <TextInput
               style={styles.input}
               value={formData.fluoroscopyTime}
               onChangeText={(value) => {
-                const cleaned = value.replace(/[^0-9:]/g, '');
+                const cleaned = value.replace(/\D/g, '');
                 setFormData(prev => ({ ...prev, fluoroscopyTime: cleaned }));
               }}
-              placeholder="e.g. 3:35"
+              placeholder="Enter screening time in seconds (e.g. 215)"
+              keyboardType="numeric"
               editable={!isReadOnly}
             />
           </View>
@@ -1787,6 +1677,12 @@ export default function COIDAFormScreen() {
                   <View style={styles.gpsBadge}>
                     <MapPin size={12} color="#28A745" />
                     <Text style={styles.gpsText}>{formData.timeOutTheatreClockPhotoMetadata.latitude.toFixed(6)}, {formData.timeOutTheatreClockPhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingClockOut && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#00A3A3" />
+                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
                   </View>
                 )}
                 <TouchableOpacity
@@ -1989,6 +1885,18 @@ export default function COIDAFormScreen() {
           <View style={styles.photoField}>
             <Text style={styles.label}>Photo of Referral Letter</Text>
             <Text style={styles.labelSubtitle}>Document will be automatically enhanced and converted to PDF</Text>
+            {isExtractingReferral && (
+              <View style={styles.ocrLoadingBadge}>
+                <ActivityIndicator size="small" color="#00A3A3" />
+                <Text style={styles.ocrLoadingText}>Extracting referral details with AI...</Text>
+              </View>
+            )}
+            {!isExtractingReferral && referralExtractedFields.length > 0 && (
+              <View style={styles.ocrSuccessBadge}>
+                <Sparkles size={14} color="#00A3A3" />
+                <Text style={styles.ocrSuccessText}>{referralExtractedFields.length} fields auto-filled from referral</Text>
+              </View>
+            )}
             {formData.referralLetterPages.length > 0 ? (
               <>
                 {formData.referralLetterPages.map((page, index) => (
@@ -2319,11 +2227,12 @@ export default function COIDAFormScreen() {
             },
           }));
           
-          setFormData(prev => ({
-            ...prev,
-            referralLetterPages: [...prev.referralLetterPages, ...pagesWithMetadata],
-            referralLetterPDF: pdfBase64 ? `data:application/pdf;base64,${pdfBase64}` : prev.referralLetterPDF,
-          }));
+          const merged = {
+            ...formDataRef.current,
+            referralLetterPages: [...formDataRef.current.referralLetterPages, ...pagesWithMetadata],
+            referralLetterPDF: pdfBase64 ? `data:application/pdf;base64,${pdfBase64}` : formDataRef.current.referralLetterPDF,
+          } as COIDAFormData;
+          setFormData(merged);
           
           setShowDocumentScanner(false);
           
@@ -2331,6 +2240,38 @@ export default function COIDAFormScreen() {
             Alert.alert('Success', `${pages.length} page(s) scanned and converted to PDF`);
           } else {
             Alert.alert('Success', `${pages.length} page(s) added (images only on native)`);
+          }
+
+          const firstPageUri = pagesWithMetadata[0]?.uri;
+          if (firstPageUri) {
+            void (async () => {
+              setIsExtractingReferral(true);
+              let aiMerged: COIDAFormData = merged;
+              try {
+                const extracted = await extractReferralData(firstPageUri);
+                const normalized = normalizeReferralData(extracted);
+                const filledFields = Object.keys(normalized);
+                const procedures = normalizeProcedureEntries(normalized.procedures);
+                aiMerged = {
+                  ...merged,
+                  ...normalized,
+                  ...(procedures.length > 0 ? { procedure: procedures } : {}),
+                } as COIDAFormData;
+                setFormData(aiMerged);
+                if (filledFields.length > 0) {
+                  setReferralExtractedFields(filledFields);
+                  console.log('[ReferralOCR] COIDA auto-filled fields:', filledFields.join(', '));
+                }
+              } catch (ocrError) {
+                console.error('[ReferralOCR] extraction failed:', ocrError);
+              } finally {
+                setIsExtractingReferral(false);
+                // Auto-save draft once the referral letter has been scanned
+                await autoSaveDraft(aiMerged);
+              }
+            })();
+          } else {
+            void autoSaveDraft(merged);
           }
         }}
       />

@@ -176,6 +176,8 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
         contrastAmount: anyForm.contrastAmount ?? '',
         fixedInstallation: anyForm.fixedInstallation ?? '',
         dap: anyForm.dap ?? '',
+        hospitalName: anyForm.hospitalName ?? '',
+        radiographerEmail: anyForm.radiographerEmail ?? '',
         radiographerName: form.radiographerName ?? '',
         radiographerSignatureTimestamp: form.radiographerSignatureTimestamp ?? '',
         radiographerSignatureLocation: form.radiographerSignatureLocation ?? '',

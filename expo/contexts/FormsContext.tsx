@@ -56,6 +56,8 @@ export interface FormData {
   authorizationCode: string;
   fixedInstallation: string;
   dap: string;
+  hospitalName?: string;
+  radiographerEmail?: string;
   mainMemberTitle: Title;
   mainMemberFirstName: string;
   mainMemberLastName: string;
@@ -510,6 +512,7 @@ export const [FormsProvider, useForms] = createContextHook<FormsContextValue>(()
         'hospitalServiceProvider', 'ward', 'bed', 'admissionDate', 'admissionTime', 'caseNumber',
         'referringDoctor', 'doctorPracticeNumber', 'authorizationCode',
         'fixedInstallation', 'dap',
+        'hospitalName', 'radiographerEmail',
         'nextOfKinName', 'nextOfKinContactNumber',
         'procedure', 'icd10Code', 'screeningTimeText', 'reasonForTimeDiscrepancy',
         'timeCArmTakenIn', 'timeCArmTakenOut',

@@ -41,7 +41,13 @@ export const generateClaimSpreadsheet = (form: FormData): string => {
 
   const timeInTheatre = safeString(coidaForm.timeInTheatre || '');
   const timeOutTheatre = safeString(coidaForm.timeOutTheatre || '');
-  const fluoroscopyTimeSeconds = parseInt(safeString(coidaForm.fluoroscopyTime || '0')) || 0;
+  const rawFluoroscopyTime = safeString(coidaForm.fluoroscopyTime || '');
+  const fluoroscopyTimeSeconds = rawFluoroscopyTime.includes(':')
+    ? ((): number => {
+        const [m, s] = rawFluoroscopyTime.split(':');
+        return (parseInt(m, 10) || 0) * 60 + (parseInt(s, 10) || 0);
+      })()
+    : parseInt(rawFluoroscopyTime) || 0;
   const employeeNo = safeString(coidaForm.employeeNumber || '');
   const dateOfInjury = safeString(coidaForm.dateOfIncident || '').replace(/-/g, '').replace(/\//g, '');
   
@@ -168,6 +174,7 @@ export const generateClaimSpreadsheet = (form: FormData): string => {
       'PerDiem': '',
       'LengthOfStay': totalTheatreTimeMinutes > 0 ? totalTheatreTimeMinutes.toString() : '',
       'TypeOfFund': 'COIDA',
+      'HospitalName': safeString(coidaForm.hospitalName || ''),
       'RadiogrpaherName': radiographerDisplayName,
       'RadiogrpaherPrefix': radiographerPrefix,
     });

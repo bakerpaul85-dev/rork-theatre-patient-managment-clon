@@ -2,6 +2,7 @@ import * as MailComposer from 'expo-mail-composer';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform, Alert } from 'react-native';
 import { FormData } from '@/contexts/FormsContext';
+import { findRadiographerByEmail, RADIOGRAPHERS } from '@/constants/radiographers';
 import { readPhoto } from '@/utils/photoStorage';
 
 export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]): { subject: string; body: string; recipients: string[] } {
@@ -63,6 +64,9 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     ? coidaForm.procedure.join(', ')
     : String(coidaForm.procedure || '');
 
+  const radiographerRecord = findRadiographerByEmail((form as any).radiographerEmail || '')
+    || RADIOGRAPHERS.find(r => r.name.toLowerCase() === (form.radiographerName || '').toLowerCase());
+
   const subject = `COIDA Form - ${patientName}`;
   const body =
     `COIDA Form Submission (Resent)\n\n` +
@@ -76,7 +80,8 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `Email: ${form.email || ''}\n` +
     `Patient Address: ${coidaForm.patientAddress || 'N/A'}\n\n` +
     `Admission Date: ${coidaForm.admissionDate || 'N/A'}\n` +
-    `Admission Time: ${coidaForm.admissionTime || 'N/A'}\n\n` +
+    `Admission Time: ${coidaForm.admissionTime || 'N/A'}\n` +
+    `Hospital Name: ${coidaForm.hospitalName || 'N/A'}\n\n` +
     `COIDA Number: ${coidaForm.coidaMemberNumber || ''}\n` +
     `IOD Claim Number: ${coidaForm.patientIodClaimNumber || ''}\n` +
     `Employer: ${coidaForm.employerName || ''}\n` +
@@ -88,9 +93,10 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `Fixed Installation: ${coidaForm.fixedInstallation || 'N/A'}\n\n` +
     `Time In Theatre: ${coidaForm.timeInTheatre || ''}\n` +
     `Time Out Theatre: ${coidaForm.timeOutTheatre || ''}\n` +
-    `Fluoroscopy Time: ${((): string => { const t = String(coidaForm.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
+    `Screening Time: ${((): string => { const t = String(coidaForm.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) { const [m, s] = t.split(':'); return String((parseInt(m, 10) || 0) * 60 + (parseInt(s, 10) || 0)); } return t; })()} (seconds)\n` +
     `${coidaForm.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${coidaForm.reasonForTimeDiscrepancy}\n` : ''}` +
     `\nRadiographer: ${form.radiographerName || ''}\n` +
+    `Billing Practice: ${radiographerRecord?.prefix || radiographerRecord?.name || 'N/A'}\n` +
     `Signed: ${form.radiographerSignatureTimestamp ? new Date(form.radiographerSignatureTimestamp).toLocaleString() : 'N/A'}\n` +
     ((form as any).submissionLatitude && (form as any).submissionLongitude
       ? `Location: ${form.radiographerSignatureLocation || ''} — https://maps.google.com/?q=${(form as any).submissionLatitude},${(form as any).submissionLongitude}\n`

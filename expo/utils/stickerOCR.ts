@@ -47,6 +47,24 @@ export interface ExtractedStickerData {
   hospitalServiceProvider?: string;
   dap?: string;
   fixedInstallation?: string;
+  hospitalName?: string;
+}
+
+export interface ExtractedReferralData {
+  patientFirstName?: string;
+  patientLastName?: string;
+  idNumber?: string;
+  coidaMemberNumber?: string;
+  patientIodClaimNumber?: string;
+  employerName?: string;
+  employerContact?: string;
+  dateOfIncident?: string;
+  procedures?: string[];
+  dateOfProcedure?: string;
+  icd10Code?: string;
+  hospitalName?: string;
+  admissionDate?: string;
+  admissionTime?: string;
 }
 
 const stripDataUriPrefix = (uri: string): string => {
@@ -125,7 +143,8 @@ Return ONLY a JSON object (no markdown, no explanation) with these fields. Leave
   "doctorPracticeNumber": "",
   "hospitalServiceProvider": "",
   "dap": "",
-  "fixedInstallation": "Yes|No"
+  "fixedInstallation": "Yes|No",
+  "hospitalName": ""
 }
 
 Rules:
@@ -135,21 +154,18 @@ Rules:
 - Phone numbers: extract the digits after the label. The label "WK" or "Work" means the patient's work number → put in workPhone. The label "HM" or "Home" or "H" means the patient's home/mobile number → put in homePhone. If the sticker has only one phone number with no label, put it in contactNumber.
 - If a field is a label on the sticker with no value, leave it empty.
 - If the main member is the same as the patient, still fill in main member fields.
+- hospitalName: the name of the hospital printed on the sticker or letterhead.
 - Return ONLY the JSON, no other text.`;
 
 /**
- * Extract structured data from a hospital sticker photo using AI vision OCR.
- * @param photoUri - The base64 data URI or file URI of the hospital sticker photo.
- * @returns Extracted fields that can be merged into form data.
+ * Shared AI vision request: resizes the image, calls the OCR model via the
+ * Rork proxy and parses the JSON response.
  */
-export const extractStickerData = async (photoUri: string): Promise<ExtractedStickerData> => {
+const requestVisionJSON = async (prompt: string, photoUri: string): Promise<Record<string, unknown>> => {
   if (!TOOLKIT_URL) {
     throw new Error('Toolkit URL not configured');
   }
 
-  console.log('[StickerOCR] Starting AI extraction...');
-
-  // Resize image to fit within request body limit
   const resizedBase64 = await resizeForUpload(photoUri);
   if (!resizedBase64) {
     throw new Error('Failed to process image for OCR');
@@ -162,12 +178,12 @@ export const extractStickerData = async (photoUri: string): Promise<ExtractedSti
     messages: [
       {
         role: 'system',
-        content: 'You are a medical document OCR specialist. You extract structured data from hospital patient stickers. You return only valid JSON, no markdown or explanations.',
+        content: 'You are a medical document OCR specialist. You extract structured data from medical documents and photos. You return only valid JSON, no markdown or explanations.',
       },
       {
         role: 'user',
         content: [
-          { type: 'text', text: EXTRACTION_PROMPT },
+          { type: 'text', text: prompt },
           {
             type: 'image_url',
             image_url: { url: `data:image/jpeg;base64,${resizedBase64}` },
@@ -190,8 +206,6 @@ export const extractStickerData = async (photoUri: string): Promise<ExtractedSti
     headers['Authorization'] = `Bearer ${SECRET_KEY}`;
   }
 
-  console.log('[StickerOCR] Sending request to:', endpoint);
-
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,
@@ -212,8 +226,6 @@ export const extractStickerData = async (photoUri: string): Promise<ExtractedSti
     throw new Error('No OCR data returned from AI');
   }
 
-  console.log('[StickerOCR] Raw AI response length:', content.length);
-
   // Extract JSON from the response (handle cases where AI wraps in markdown)
   let jsonStr = content.trim();
   const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
@@ -221,7 +233,7 @@ export const extractStickerData = async (photoUri: string): Promise<ExtractedSti
     jsonStr = jsonMatch[0];
   }
 
-  let parsed: ExtractedStickerData;
+  let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(jsonStr);
   } catch (parseError) {
@@ -229,16 +241,161 @@ export const extractStickerData = async (photoUri: string): Promise<ExtractedSti
     throw new Error('Failed to parse OCR results');
   }
 
-  // Clean up: remove empty strings and normalize
-  const cleaned: ExtractedStickerData = {};
+  return parsed;
+};
+
+const cleanStringFields = (parsed: Record<string, unknown>): Record<string, string> => {
+  const cleaned: Record<string, string> = {};
   for (const [key, value] of Object.entries(parsed)) {
     if (typeof value === 'string' && value.trim()) {
-      (cleaned as any)[key] = value.trim();
+      cleaned[key] = value.trim();
+    }
+  }
+  return cleaned;
+};
+
+/**
+ * Extract structured data from a hospital sticker photo using AI vision OCR.
+ * @param photoUri - The base64 data URI or file URI of the hospital sticker photo.
+ * @returns Extracted fields that can be merged into form data.
+ */
+export const extractStickerData = async (photoUri: string): Promise<ExtractedStickerData> => {
+  console.log('[StickerOCR] Starting AI extraction...');
+  const parsed = await requestVisionJSON(EXTRACTION_PROMPT, photoUri);
+  const cleaned = cleanStringFields(parsed) as ExtractedStickerData;
+  console.log('[StickerOCR] Extracted fields:', Object.keys(cleaned).join(', '));
+  return cleaned;
+};
+
+const REFERRAL_PROMPT = `You are a medical document OCR specialist. Examine this scanned COIDA referral letter / form from a doctor or hospital and extract the following details.
+
+Return ONLY a JSON object (no markdown, no explanation) with these fields. Leave a field empty string "" if not present in the document:
+
+{
+  "patientFirstName": "",
+  "patientLastName": "",
+  "idNumber": "",
+  "coidaMemberNumber": "",
+  "patientIodClaimNumber": "",
+  "employerName": "",
+  "employerContact": "",
+  "dateOfIncident": "DD/MM/YYYY",
+  "procedures": [],
+  "dateOfProcedure": "DD/MM/YYYY",
+  "icd10Code": "",
+  "hospitalName": "",
+  "admissionDate": "DD/MM/YYYY",
+  "admissionTime": "HHMM"
+}
+
+Rules:
+- coidaMemberNumber: the COIDA / WCA / Compensation Fund number (digits only).
+- patientIodClaimNumber: the IOD claim reference number.
+- procedures: list each procedure / tariff code mentioned, one string per procedure in the format "CODE DESCRIPTION" (e.g. "00155 X-ray C-arm fluoroscopy in theatre per half hour").
+- icd10Code: the ICD-10 diagnosis code (e.g. S72.0).
+- dateOfIncident: the date of the injury / accident.
+- dateOfProcedure: the date the procedure was performed.
+- hospitalName: the hospital where the procedure took place or where the patient was admitted.
+- Convert all dates to DD/MM/YYYY format.
+- Convert admissionTime to 24h HHMM.
+- Return ONLY the JSON, no other text.`;
+
+/**
+ * Extract COIDA claim details from a scanned referral letter page.
+ */
+export const extractReferralData = async (photoUri: string): Promise<ExtractedReferralData> => {
+  console.log('[ReferralOCR] Starting AI extraction...');
+  const parsed = await requestVisionJSON(REFERRAL_PROMPT, photoUri);
+
+  const result: ExtractedReferralData = { ...cleanStringFields(parsed) } as ExtractedReferralData;
+
+  if (Array.isArray(parsed.procedures)) {
+    result.procedures = parsed.procedures.map((p) => String(p ?? '').trim()).filter(Boolean);
+  } else if (typeof parsed.procedures === 'string' && parsed.procedures.trim()) {
+    result.procedures = parsed.procedures.split(/;|,\s*/).map((p) => p.trim()).filter(Boolean);
+  }
+
+  console.log('[ReferralOCR] Extracted fields:', Object.keys(result).join(', '));
+  return result;
+};
+
+const normalizeDateToDDMMYYYY = (value: string): string => {
+  const trimmed = value.trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 8) {
+    // Could be DDMMYYYY or YYYYMMDD — prefer DDMMYYYY when the first 4 aren't a plausible year
+    if (parseInt(digits.substring(0, 4), 10) > 1900 && parseInt(digits.substring(0, 4), 10) < 2100) {
+      return `${digits.substring(6, 8)}/${digits.substring(4, 6)}/${digits.substring(0, 4)}`;
+    }
+    return `${digits.substring(0, 2)}/${digits.substring(2, 4)}/${digits.substring(4, 8)}`;
+  }
+  return trimmed;
+};
+
+/**
+ * Map extracted referral data to valid COIDA form values.
+ */
+export const normalizeReferralData = (data: ExtractedReferralData): Record<string, unknown> => {
+  const result: Record<string, unknown> = {};
+
+  if (data.patientFirstName) result.patientFirstName = data.patientFirstName;
+  if (data.patientLastName) result.patientLastName = data.patientLastName;
+  if (data.idNumber) result.idNumber = data.idNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (data.coidaMemberNumber) result.coidaMemberNumber = data.coidaMemberNumber.replace(/\D/g, '');
+  if (data.patientIodClaimNumber) result.patientIodClaimNumber = data.patientIodClaimNumber.replace(/\D/g, '');
+  if (data.employerName) result.employerName = data.employerName;
+  if (data.employerContact) result.employerContact = data.employerContact.replace(/[^0-9+\s]/g, '');
+  if (data.dateOfIncident) result.dateOfIncident = normalizeDateToDDMMYYYY(data.dateOfIncident);
+  if (data.procedures && data.procedures.length > 0) result.procedures = data.procedures;
+  if (data.dateOfProcedure) result.dateOfProcedure = normalizeDateToDDMMYYYY(data.dateOfProcedure);
+  if (data.icd10Code) result.icd10Code = data.icd10Code.toUpperCase().replace(/\s+/g, '');
+  if (data.hospitalName) result.hospitalName = data.hospitalName;
+  if (data.admissionDate) result.admissionDate = data.admissionDate.replace(/\D/g, '');
+  if (data.admissionTime) {
+    const numericTime = data.admissionTime.replace(/\D/g, '');
+    if (numericTime.length >= 3) {
+      result.admissionTime = `${numericTime.substring(0, 2)}H${numericTime.substring(2, 4)}`;
     }
   }
 
-  console.log('[StickerOCR] Extracted fields:', Object.keys(cleaned).join(', '));
-  return cleaned;
+  return result;
+};
+
+const CLOCK_PROMPT = `Examine this photo of a hospital theatre wall clock (analogue or digital).
+
+Read the time displayed on the clock. Return ONLY a JSON object (no markdown, no explanation):
+
+{
+  "time": "HHMM"
+}
+
+Rules:
+- Use 24-hour format, e.g. 14H30 becomes "1430", 09H05 becomes "0905".
+- For analogue clocks, read the hour and minute hands carefully.
+- If the clock face is unreadable or there is no clock visible, return "" for time.
+- Return ONLY the JSON, no other text.`;
+
+/**
+ * Read the time from a theatre clock photo and return it formatted as HHMM
+ * (e.g. "14H30") for the form's time fields. Returns "" if unreadable.
+ */
+export const extractClockTime = async (photoUri: string): Promise<string> => {
+  console.log('[ClockOCR] Starting AI extraction...');
+  const parsed = await requestVisionJSON(CLOCK_PROMPT, photoUri);
+  const raw = typeof parsed.time === 'string' ? parsed.time : '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 3) {
+    console.log('[ClockOCR] No readable time in photo');
+    return '';
+  }
+  const hh = Math.min(23, Math.max(0, parseInt(digits.substring(0, 2), 10) || 0));
+  const mm = Math.min(59, Math.max(0, parseInt(digits.substring(2, 4).padEnd(2, '0'), 10) || 0));
+  const formatted = `${String(hh).padStart(2, '0')}H${String(mm).padStart(2, '0')}`;
+  console.log('[ClockOCR] Extracted time:', formatted);
+  return formatted;
 };
 
 /**
@@ -292,6 +449,7 @@ export const normalizeStickerData = (data: ExtractedStickerData): Partial<Record
   if (data.mainMemberIdNumber) result.mainMemberIdNumber = data.mainMemberIdNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
   if (data.referringDoctor) result.referringDoctor = data.referringDoctor;
   if (data.doctorPracticeNumber) result.doctorPracticeNumber = data.doctorPracticeNumber;
+  if (data.hospitalName) result.hospitalName = data.hospitalName;
   if (data.hospitalServiceProvider) result.hospitalServiceProvider = data.hospitalServiceProvider;
   if (data.dap) result.dap = data.dap;
   if (data.fixedInstallation) {
