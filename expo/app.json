@@ -36,7 +36,11 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-mail-composer"
+      "expo-mail-composer",
+      "expo-image",
+      "expo-sharing",
+      "expo-splash-screen",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true
