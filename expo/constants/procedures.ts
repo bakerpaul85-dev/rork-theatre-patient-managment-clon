@@ -40,4 +40,4 @@ export const PROCEDURE_OPTIONS = [
 export type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
 export const TITLES: Title[] = ['Mr', 'Mrs', 'Miss', 'Ms', 'Dr', 'Prof'];
 
-export const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za'];
+export const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za', 'kgmoropane@winnysolutions.co.za'];

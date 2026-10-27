@@ -27,9 +27,20 @@ interface AuthContextValue {
 const USERS_STORAGE_KEY = '@theatre_users';
 const SESSION_STORAGE_KEY = '@theatre_session';
 
+// Linked account: KG Moropane's personal Gmail. Linked to (but separate from)
+// the ADMIN_KG admin account — it does NOT carry admin privileges. Cases
+// submitted from this account are copied to the admin address
+// (see utils/hospitalOverride.ts).
+
 const ADMIN_ACCOUNTS: StoredUser[] = [
   { username: 'ADMIN_PAUL', password: 'Admin@2024', name: 'Paul (Admin)', email: 'paul@btstech.co.za' },
   { username: 'ADMIN_ALLAN', password: 'Admin@2024', name: 'Allan (Admin)', email: 'allan@medimarketing100.co.za' },
+  { username: 'ADMIN_KG', password: 'Admin@2024', name: 'KG Moropane (Admin)', email: 'kgmoropane@winnysolutions.co.za' },
+];
+
+// Non-admin linked accounts, seeded alongside the admin accounts.
+const LINKED_ACCOUNTS: StoredUser[] = [
+  { username: 'KG_MOROPANE', password: 'Moropane@2024', name: 'KG Moropane', email: 'siphiwesmall79@gmail.com' },
 ];
 
 export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() => {
@@ -44,11 +55,11 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() =>
       const usersJson = await AsyncStorage.getItem(USERS_STORAGE_KEY);
       const users: StoredUser[] = usersJson ? JSON.parse(usersJson) : [];
       let changed = false;
-      for (const admin of ADMIN_ACCOUNTS) {
-        const exists = users.find(u => (u.email ?? '').toLowerCase() === admin.email.toLowerCase());
+      for (const seeded of [...ADMIN_ACCOUNTS, ...LINKED_ACCOUNTS]) {
+        const exists = users.find(u => (u.email ?? '').toLowerCase() === seeded.email.toLowerCase());
         if (!exists) {
-          console.log('[Auth] Seeding admin account:', admin.email);
-          users.push(admin);
+          console.log('[Auth] Seeding account:', seeded.email);
+          users.push(seeded);
           changed = true;
         }
       }
@@ -102,7 +113,8 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() =>
       console.log('[SignUp] Retrieved users from storage:', usersJson);
       const users: StoredUser[] = usersJson ? JSON.parse(usersJson) : [];
 
-      const existingUser = users.find(u => (u.email?.toLowerCase() === email?.toLowerCase()) || u.username === username);
+      const primaryEmail = (email ?? '').toLowerCase();
+      const existingUser = users.find(u => (u.email?.toLowerCase() === primaryEmail) || u.username === username);
       if (existingUser) {
         console.log('[SignUp] User already exists');
         return false;
@@ -112,7 +124,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() =>
         username,
         password,
         name,
-        email: (email ?? '').toLowerCase(),
+        email: primaryEmail,
       };
 
       users.push(newStoredUser);
@@ -126,7 +138,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() =>
       const newUser: User = {
         username,
         name,
-        email: (email ?? '').toLowerCase(),
+        email: primaryEmail,
       };
       setUser(newUser);
       await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newUser));

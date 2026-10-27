@@ -2,22 +2,22 @@
   "expo": {
     "name": "Theatre Patient Management",
     "slug": "ecqra2znxssw7mr4bzfq8",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "rork-app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.ecqra2znxssw7mr4bzfq8"
+      "bundleIdentifier": "app.rork.ecqra2znxssw7mr4bzfq8",
+      "infoPlist": {
+        "NSCameraUsageDescription": "The camera is used to photograph hospital stickers, referral letters and other patient documents.",
+        "NSLocationWhenInUseUsageDescription": "Location is added to form submissions and document photos as a POPIA audit trail.",
+        "NSPhotoLibraryUsageDescription": "Photos can be attached to forms from your photo library."
+      }
     },
     "android": {
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -39,8 +39,25 @@
       "expo-mail-composer",
       "expo-image",
       "expo-sharing",
-      "expo-splash-screen",
-      "expo-status-bar"
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "imageWidth": 200
+        }
+      ],
+      "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "buildArchs": ["arm64-v8a", "armeabi-v7a"]
+          }
+        }
+      ],
+      "./plugins/withLowMemoryGradle"
     ],
     "experiments": {
       "typedRoutes": true

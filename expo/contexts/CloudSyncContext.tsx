@@ -4,14 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 
 import {
-  getFirestore, Firestore, doc, setDoc, deleteDoc, getDocs,
+  initializeFirestore, Firestore, doc, setDoc, deleteDoc, getDocs,
   collection, query, orderBy,
 } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { FormData } from './FormsContext';
 
 const FIREBASE_CONFIG_KEY = '@firebase_config';
-export const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za'];
+export const ADMIN_EMAILS = ['paul@btstech.co.za', 'allan@medimarketing100.co.za', 'kgmoropane@winnysolutions.co.za'];
 
 const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
   apiKey: 'AIzaSyCgllczOlYOAJq0VVO-KrG3Uk--DO929Uk',
@@ -73,7 +73,9 @@ export const [CloudSyncProvider, useCloudSync] = createContextHook<CloudSyncCont
     if (!firebaseConfig) return null;
     try {
       const app = getOrCreateApp(firebaseConfig);
-      dbRef.current = getFirestore(app);
+      // Auto-detect long polling: avoids WebChannel streaming transport errors
+      // ("RPC 'Write' stream transport errored") on mobile networks that block them.
+      dbRef.current = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
       return dbRef.current;
     } catch (e: any) {
       const msg = e?.message ?? e?.code ?? String(e);

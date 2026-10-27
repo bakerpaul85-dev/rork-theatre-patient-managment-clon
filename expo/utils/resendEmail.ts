@@ -4,6 +4,7 @@ import { Platform, Alert } from 'react-native';
 import { FormData } from '@/contexts/FormsContext';
 import { findRadiographerByEmail, RADIOGRAPHERS } from '@/constants/radiographers';
 import { readPhoto } from '@/utils/photoStorage';
+import { getHospitalName, getAdminCopyRecipients } from '@/utils/hospitalOverride';
 
 export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]): { subject: string; body: string; recipients: string[] } {
   const patientName = `${form.patientTitle || ''} ${form.patientFirstName || ''} ${form.patientLastName || ''}`.trim();
@@ -19,7 +20,7 @@ export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]
     `Work Phone: ${(form as any).workPhone || 'N/A'}\n` +
     `Email: ${form.email || ''}\n` +
     `Patient Address: ${(form as any).patientAddress || 'N/A'}\n\n` +
-    `Hospital/Service Provider: ${form.hospitalServiceProvider || ''}\n` +
+    `Hospital/Service Provider: ${getHospitalName(form.radiographerEmail, form.hospitalServiceProvider)}\n` +
     `Admission Date: ${(form as any).admissionDate || 'N/A'}\n` +
     `Admission Time: ${(form as any).admissionTime || 'N/A'}\n` +
     `Referring Doctor: ${form.referringDoctor || ''}\n` +
@@ -81,7 +82,7 @@ export function buildCOIDAEmail(form: FormData, customRecipients?: string[]): { 
     `Patient Address: ${coidaForm.patientAddress || 'N/A'}\n\n` +
     `Admission Date: ${coidaForm.admissionDate || 'N/A'}\n` +
     `Admission Time: ${coidaForm.admissionTime || 'N/A'}\n` +
-    `Hospital Name: ${coidaForm.hospitalName || 'N/A'}\n\n` +
+    `Hospital Name: ${getHospitalName(form.radiographerEmail, coidaForm.hospitalName)}\n\n` +
     `COIDA Number: ${coidaForm.coidaMemberNumber || ''}\n` +
     `IOD Claim Number: ${coidaForm.patientIodClaimNumber || ''}\n` +
     `Employer: ${coidaForm.employerName || ''}\n` +
@@ -217,9 +218,14 @@ async function loadPhotosForForm(form: FormData): Promise<Array<{ base64Uri: str
 export async function resendFormEmail(form: FormData, customRecipients?: string[]): Promise<void> {
   console.log('[resendEmail] Resending email for form:', form.id, 'type:', form.formType);
 
-  const { subject, body, recipients } = form.formType === 'coida'
+  const { subject, body, recipients: baseRecipients } = form.formType === 'coida'
     ? buildCOIDAEmail(form, customRecipients)
     : buildMedicalAidEmail(form, customRecipients);
+  // Cases from the KG Moropane account (incl. linked Gmail alias) also copy the admin address
+  const recipients = [...new Set([
+    ...baseRecipients,
+    ...getAdminCopyRecipients(form.radiographerEmail || form.submittedBy),
+])];
 
   const photos = await loadPhotosForForm(form);
 

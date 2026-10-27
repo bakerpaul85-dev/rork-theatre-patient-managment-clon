@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design system: "surgical ink" — deep operating-theatre navy with sterile mint accents.
+All colors MUST be HSL. */
+
+@layer base {
+  :root {
+    --background: 202 47% 7%;
+    --foreground: 180 24% 94%;
+
+    --card: 201 40% 11%;
+    --card-foreground: 180 24% 94%;
+
+    --popover: 201 40% 11%;
+    --popover-foreground: 180 24% 94%;
+
+    --primary: 166 74% 47%;
+    --primary-foreground: 202 60% 6%;
+
+    --secondary: 201 32% 17%;
+    --secondary-foreground: 180 24% 94%;
+
+    --muted: 201 28% 16%;
+    --muted-foreground: 194 14% 62%;
+
+    --accent: 186 82% 52%;
+    --accent-foreground: 202 60% 6%;
+
+    --destructive: 4 78% 57%;
+    --destructive-foreground: 180 24% 96%;
+
+    --border: 200 26% 19%;
+    --input: 200 26% 19%;
+    --ring: 166 74% 47%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 202 44% 9%;
+    --sidebar-foreground: 180 20% 90%;
+    --sidebar-primary: 166 74% 47%;
+    --sidebar-primary-foreground: 202 60% 6%;
+    --sidebar-accent: 201 32% 17%;
+    --sidebar-accent-foreground: 180 24% 94%;
+    --sidebar-border: 200 26% 19%;
+    --sidebar-ring: 166 74% 47%;
+  }
+
+  .dark {
+    --background: 202 47% 7%;
+    --foreground: 180 24% 94%;
+
+    --card: 201 40% 11%;
+    --card-foreground: 180 24% 94%;
+
+    --popover: 201 40% 11%;
+    --popover-foreground: 180 24% 94%;
+
+    --primary: 166 74% 47%;
+    --primary-foreground: 202 60% 6%;
+
+    --secondary: 201 32% 17%;
+    --secondary-foreground: 180 24% 94%;
+
+    --muted: 201 28% 16%;
+    --muted-foreground: 194 14% 62%;
+
+    --accent: 186 82% 52%;
+    --accent-foreground: 202 60% 6%;
+
+    --destructive: 4 78% 57%;
+    --destructive-foreground: 180 24% 96%;
+
+    --border: 200 26% 19%;
+    --input: 200 26% 19%;
+    --ring: 166 74% 47%;
+
+    --sidebar-background: 202 44% 9%;
+    --sidebar-foreground: 180 20% 90%;
+    --sidebar-primary: 166 74% 47%;
+    --sidebar-primary-foreground: 202 60% 6%;
+    --sidebar-accent: 201 32% 17%;
+    --sidebar-accent-foreground: 180 24% 94%;
+    --sidebar-border: 200 26% 19%;
+    --sidebar-ring: 166 74% 47%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer utilities {
+  /* Faint clinical grid, like theatre floor tiling / monitor graticule */
+  .bg-graticule {
+    background-image:
+      linear-gradient(to right, hsl(180 30% 60% / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(180 30% 60% / 0.045) 1px, transparent 1px);
+    background-size: 46px 46px;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}

@@ -215,6 +215,12 @@ const requestVisionJSON = async (prompt: string, photoUri: string): Promise<Reco
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
     console.error('[StickerOCR] API error:', response.status, errorText);
+    if (response.status === 402) {
+      throw new Error('AI extraction is temporarily unavailable. Please fill in the fields manually and try again later.');
+    }
+    if (response.status === 401) {
+      throw new Error('AI features are currently unavailable. Please restart the app.');
+    }
     throw new Error(`OCR request failed (${response.status})`);
   }
 
@@ -364,6 +370,131 @@ export const normalizeReferralData = (data: ExtractedReferralData): Record<strin
   return result;
 };
 
+export interface ExtractedMedAidReferralData {
+  patientTitle?: string;
+  patientFirstName?: string;
+  patientLastName?: string;
+  idNumber?: string;
+  contactNumber?: string;
+  referringDoctor?: string;
+  doctorPracticeNumber?: string;
+  medicalAidName?: string;
+  membershipNumber?: string;
+  dependantCode?: string;
+  icd10Code?: string;
+  procedure?: string;
+  procedureDate?: string;
+  admissionDate?: string;
+  admissionTime?: string;
+  theatreTimeIn?: string;
+  theatreTimeOut?: string;
+  hospitalServiceProvider?: string;
+}
+
+const MEDICAL_AID_REFERRAL_PROMPT = `You are a medical document OCR specialist. Examine this scanned referral letter / theatre screening tool from a doctor, hospital or radiography practice for a Medical Aid claim and extract the following details.
+
+The document may be typed, handwritten, or contain a pasted hospital patient sticker (with patient name, medical aid scheme, membership number, dependant code, admission date/time). Read both the sticker and the handwritten fields.
+
+Return ONLY a JSON object (no markdown, no explanation) with these fields. Leave a field empty string "" if not present in the document:
+
+{
+  "patientTitle": "",
+  "patientFirstName": "",
+  "patientLastName": "",
+  "idNumber": "",
+  "contactNumber": "",
+  "referringDoctor": "",
+  "doctorPracticeNumber": "",
+  "medicalAidName": "",
+  "membershipNumber": "",
+  "dependantCode": "",
+  "icd10Code": "",
+  "procedure": "",
+  "procedureDate": "DD/MM/YYYY",
+  "admissionDate": "DD/MM/YYYY",
+  "admissionTime": "HHMM",
+  "theatreTimeIn": "HHMM",
+  "theatreTimeOut": "HHMM",
+  "hospitalServiceProvider": ""
+}
+
+Rules:
+- patientTitle: one of Mr, Mrs, Miss, Ms, Dr, Prof.
+- referringDoctor: the doctor's name from the "Doctor" field (e.g. "Azhar").
+- doctorPracticeNumber: the "Practice number" field (digits only, e.g. "2001314" or "039 001 0483931" without spaces).
+- medicalAidName: the medical aid scheme name from the sticker or form (e.g. "BONITAS", "Discovery Health", "GEMS").
+- membershipNumber: the medical aid membership number (digits only, e.g. "12603904").
+- dependantCode: the dependant number/code on the medical aid card (e.g. "01").
+- procedure: the "Procedure" field as written, including the level/spine region if present (e.g. "Endoscopic discectomy L4-L5").
+- procedureDate: the "Procedure date" field.
+- admissionDate: the "Admitted" date on the sticker if present.
+- admissionTime: the "Admitted" time on the sticker if present.
+- theatreTimeIn: the "Theatre C-Arm time in" field (24h, e.g. "15:45" becomes "1545").
+- theatreTimeOut: the "Theatre C-Arm time out" field (24h, e.g. "18:34" becomes "1834").
+- icd10Code: ALL ICD-10 diagnosis codes from the "ICD-10 codes" box, separated by commas (e.g. "M47.26, M48.06").
+- hospitalServiceProvider: the "Hospital" field (e.g. "The Fountain hospital").
+- Convert all dates to DD/MM/YYYY format.
+- Convert all times to 24h HHMM.
+- Return ONLY the JSON, no other text.`;
+
+/**
+ * Extract Medical Aid claim details from a scanned referral letter page.
+ */
+export const extractMedicalAidReferralData = async (photoUri: string): Promise<ExtractedMedAidReferralData> => {
+  console.log('[MedAidReferralOCR] Starting AI extraction...');
+  const parsed = await requestVisionJSON(MEDICAL_AID_REFERRAL_PROMPT, photoUri);
+  const result: ExtractedMedAidReferralData = { ...cleanStringFields(parsed) } as ExtractedMedAidReferralData;
+  console.log('[MedAidReferralOCR] Extracted fields:', Object.keys(result).join(', '));
+  return result;
+};
+
+/**
+ * Map extracted referral data to valid Medical Aid form values.
+ */
+export const normalizeMedicalAidReferralData = (data: ExtractedMedAidReferralData): Record<string, unknown> => {
+  const result: Record<string, unknown> = {};
+
+  if (data.patientTitle) {
+    const title = data.patientTitle.trim().toLowerCase();
+    const matched = ['mr', 'mrs', 'miss', 'ms', 'dr', 'prof'].find(t => t === title);
+    if (matched) result.patientTitle = matched.charAt(0).toUpperCase() + matched.slice(1);
+  }
+  if (data.patientFirstName) result.patientFirstName = data.patientFirstName;
+  if (data.patientLastName) result.patientLastName = data.patientLastName;
+  if (data.idNumber) result.idNumber = data.idNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (data.contactNumber) result.contactNumber = data.contactNumber.replace(/[^0-9+\s]/g, '');
+  if (data.referringDoctor) result.referringDoctor = data.referringDoctor;
+  if (data.doctorPracticeNumber) result.doctorPracticeNumber = data.doctorPracticeNumber.replace(/\D/g, '');
+  if (data.medicalAidName) result.medicalAidName = data.medicalAidName;
+  if (data.membershipNumber) result.membershipNumber = data.membershipNumber.replace(/[^a-zA-Z0-9]/g, '');
+  if (data.dependantCode) result.dependantCode = data.dependantCode.trim();
+  if (data.icd10Code) {
+    // Keep multiple codes readable: "M47.26 M48.06" -> "M47.26, M48.06"
+    const codes = data.icd10Code.toUpperCase().split(/[\s,;]+/).map(c => c.trim()).filter(Boolean);
+    if (codes.length > 0) result.icd10Code = codes.join(', ');
+  }
+  if (data.procedure) result.procedure = data.procedure.trim();
+  const admissionDate = data.admissionDate || data.procedureDate;
+  if (admissionDate) result.admissionDate = admissionDate.replace(/\D/g, '');
+  if (data.admissionTime) {
+    const numericTime = data.admissionTime.replace(/\D/g, '');
+    if (numericTime.length >= 3) {
+      result.admissionTime = `${numericTime.substring(0, 2)}H${numericTime.substring(2, 4)}`;
+    }
+  }
+  const theatreTimeIn = data.theatreTimeIn?.replace(/\D/g, '');
+  if (theatreTimeIn && theatreTimeIn.length >= 3) {
+    result.timeCArmTakenIn = `${theatreTimeIn.substring(0, 2)}H${theatreTimeIn.substring(2, 4)}`;
+  }
+  const theatreTimeOut = data.theatreTimeOut?.replace(/\D/g, '');
+  if (theatreTimeOut && theatreTimeOut.length >= 3) {
+    result.timeCArmTakenOut = `${theatreTimeOut.substring(0, 2)}H${theatreTimeOut.substring(2, 4)}`;
+  }
+  if (data.hospitalServiceProvider) result.hospitalServiceProvider = data.hospitalServiceProvider;
+
+  return result;
+};
+
 const CLOCK_PROMPT = `Examine this photo of a hospital theatre wall clock (analogue or digital).
 
 Read the time displayed on the clock. Return ONLY a JSON object (no markdown, no explanation):
@@ -456,6 +587,96 @@ export const normalizeStickerData = (data: ExtractedStickerData): Partial<Record
     const match = validYesNo.find(v => v.toLowerCase() === data.fixedInstallation?.toLowerCase());
     if (match) result.fixedInstallation = match;
   }
+
+  return result;
+};
+
+export interface ExtractedEmployerData {
+  employerName?: string;
+  employerCode?: string;
+  employerContactPerson?: string;
+  employerContact?: string;
+  employerAddress?: string;
+  dateOfIncident?: string;
+  patientFirstName?: string;
+  patientLastName?: string;
+  idNumber?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  contactNumber?: string;
+  patientAddress?: string;
+}
+
+const EMPLOYER_PROMPT = `You are a document OCR specialist. Examine this photo of a South African Employers Report of an Accident form (COIDA / Compensation Fund W.Cl.2, FEMA, Rand Mutual Assurance (RMA) or similar) and extract ONLY the details from sections or fields that are marked "NB" on the form.
+
+These forms print an "NB" mark (bold or red) next to specific sections or fields. Data from fields WITHOUT an NB marking must NOT be extracted.
+
+Typical NB markings on these forms:
+- COIDA W.Cl.2 (Compensation Fund): "NB" appears in the EMPLOYEE section header ("EMPLOYEE ... CERTIFIED COPY OF IDENTITY DOCUMENT TO BE ATTACHED") — extract the employee's details from that section.
+- FEMA Part A: "NB" appears next to items "32. Date of accident" / "33. Time of accident" — extract the date of accident.
+- RMA: "NB" appears on "Contact Details" next to "Telephone No" and "Cell No" — extract the contact number.
+
+Return ONLY a JSON object (no markdown, no explanation) with these fields. Leave a field as empty string "" unless its source field/section on the photo carries an NB marking:
+
+{
+  "employerName": "",
+  "employerCode": "",
+  "employerContactPerson": "",
+  "employerContact": "",
+  "employerAddress": "",
+  "dateOfIncident": "DD/MM/YYYY",
+  "patientFirstName": "",
+  "patientLastName": "",
+  "idNumber": "",
+  "dateOfBirth": "DD/MM/YYYY",
+  "gender": "Male|Female",
+  "contactNumber": "",
+  "patientAddress": ""
+}
+
+Rules:
+- FIRST locate the NB markings on the photo. Then read the values of only the NB-marked fields, or fields inside NB-marked sections.
+- employerName / employerCode / employerContactPerson / employerContact / employerAddress: fill only if the EMPLOYER section or those specific fields carry an NB marking.
+- dateOfIncident: the date of the accident ("Date of accident", "Date of incident") — fill only if it or its row carries an NB marking. Convert to DD/MM/YYYY format.
+- Employee details feed the patient fields: patientFirstName (First names), patientLastName (Surname), idNumber (ID/Passport No), dateOfBirth, gender, contactNumber (Telephone No / Cell No), patientAddress (residential address on one line) — fill only if the EMPLOYEE section or those specific fields carry an NB marking.
+- Do NOT guess, infer or fabricate values. If an NB-marked value is unreadable, return "" for it.
+- Return ONLY the JSON, no other text.`;
+
+/**
+ * Extract employer and employee details from a captured Employers Report photo
+ * (COIDA / Compensation Fund, RMA or FEMA form) using AI vision OCR.
+ */
+export const extractEmployerReport = async (photoUri: string): Promise<ExtractedEmployerData> => {
+  console.log('[EmployerOCR] Starting AI extraction...');
+  const parsed = await requestVisionJSON(EMPLOYER_PROMPT, photoUri);
+  const cleaned = cleanStringFields(parsed) as ExtractedEmployerData;
+  console.log('[EmployerOCR] Extracted fields:', Object.keys(cleaned).join(', '));
+  return cleaned;
+};
+
+/**
+ * Map extracted employer report data to valid COIDA form values.
+ */
+export const normalizeEmployerData = (data: ExtractedEmployerData): Record<string, unknown> => {
+  const result: Record<string, unknown> = {};
+  const validGenders = ['Male', 'Female'];
+
+  if (data.employerName) result.employerName = data.employerName;
+  if (data.employerCode) result.employerCode = data.employerCode.replace(/\s+/g, ' ').trim();
+  if (data.employerContactPerson) result.employerContactPerson = data.employerContactPerson;
+  if (data.employerContact) result.employerContact = data.employerContact.replace(/[^0-9+\s]/g, '');
+  if (data.employerAddress) result.employerAddress = data.employerAddress;
+  if (data.dateOfIncident) result.dateOfIncident = normalizeDateToDDMMYYYY(data.dateOfIncident);
+  if (data.patientFirstName) result.patientFirstName = data.patientFirstName;
+  if (data.patientLastName) result.patientLastName = data.patientLastName;
+  if (data.idNumber) result.idNumber = data.idNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (data.dateOfBirth) result.dateOfBirth = data.dateOfBirth;
+  if (data.gender) {
+    const match = validGenders.find(g => g.toLowerCase() === data.gender?.toLowerCase());
+    if (match) result.gender = match;
+  }
+  if (data.contactNumber) result.contactNumber = data.contactNumber.replace(/\D/g, '');
+  if (data.patientAddress) result.patientAddress = data.patientAddress;
 
   return result;
 };

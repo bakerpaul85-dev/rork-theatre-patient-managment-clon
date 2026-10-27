@@ -26,8 +26,9 @@ import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-rout
 import DocumentScanner from '@/components/DocumentScanner';
 import PrivacyNotice from '@/components/PrivacyNotice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { extractStickerData, normalizeStickerData, extractReferralData, normalizeReferralData, extractClockTime } from '@/utils/stickerOCR';
+import { extractStickerData, normalizeStickerData, extractReferralData, normalizeReferralData, extractClockTime, extractEmployerReport, normalizeEmployerData } from '@/utils/stickerOCR';
 import { findRadiographerByEmail, RADIOGRAPHERS } from '@/constants/radiographers';
+import { getHospitalName, getAdminCopyRecipients } from '@/utils/hospitalOverride';
 
 
 
@@ -73,6 +74,9 @@ interface COIDAFormData {
   patientIodClaimNumber: string;
   employerName: string;
   employerContact: string;
+  employerCode: string;
+  employerContactPerson: string;
+  employerAddress: string;
   dateOfIncident: string;
   procedure: string[];
   proceduresList?: string[];
@@ -161,6 +165,8 @@ export default function COIDAFormScreen() {
   const scrollPositionRef = useRef<number>(0);
   const navigation = useNavigation();
   const hasUnsavedChangesRef = useRef<boolean>(false);
+  const [draftSavedVisible, setDraftSavedVisible] = useState<boolean>(false);
+  const draftSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showProcedurePicker, setShowProcedurePicker] = useState(false);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
   const [procedureSearch, setProcedureSearch] = useState('');
@@ -312,6 +318,9 @@ export default function COIDAFormScreen() {
     patientIodClaimNumber: '',
     employerName: '',
     employerContact: '',
+    employerCode: '',
+    employerContactPerson: '',
+    employerAddress: '',
     dateOfIncident: '',
     procedure: [],
     employerReportPhotos: [],
@@ -335,6 +344,8 @@ export default function COIDAFormScreen() {
   const [isExtractingClockOut, setIsExtractingClockOut] = useState<boolean>(false);
   const [isExtractingReferral, setIsExtractingReferral] = useState<boolean>(false);
   const [referralExtractedFields, setReferralExtractedFields] = useState<string[]>([]);
+  const [isExtractingEmployer, setIsExtractingEmployer] = useState<boolean>(false);
+  const [employerExtractedFields, setEmployerExtractedFields] = useState<string[]>([]);
 
   const isReadOnly = formData.radiographerSignatureTimestamp !== '';
 
@@ -647,6 +658,7 @@ export default function COIDAFormScreen() {
               await autoSaveDraft(merged);
             } catch (ocrError) {
               console.error('[StickerOCR] COIDA extraction failed:', ocrError);
+              Alert.alert('AI Extraction Failed', ocrError instanceof Error ? ocrError.message : 'Please fill in the fields manually.');
             } finally {
               setIsExtractingSticker(false);
             }
@@ -734,13 +746,46 @@ export default function COIDAFormScreen() {
           })();
           break;
         }
-        case 'employerReport':
+        case 'employerReport': {
           console.log('Adding employer report photo');
+          const isFirstEmployerPage = formDataRef.current.employerReportPhotos.length === 0;
           setFormData(prev => ({ 
             ...prev, 
             employerReportPhotos: [...prev.employerReportPhotos, { uri: photoUri, metadata: photoMetadata }],
           }));
+          // On the first page, run AI extraction of employer + employee details
+          if (isFirstEmployerPage) {
+            void (async () => {
+              setIsExtractingEmployer(true);
+              let merged: COIDAFormData | null = null;
+              try {
+                const extracted = await extractEmployerReport(photoUri);
+                const normalized = normalizeEmployerData(extracted);
+                const filledFields = Object.keys(normalized);
+                merged = {
+                  ...formDataRef.current,
+                  employerReportPhotos: [...formDataRef.current.employerReportPhotos, { uri: photoUri, metadata: photoMetadata }],
+                  ...normalized,
+                } as COIDAFormData;
+                setFormData(merged);
+                if (filledFields.length > 0) {
+                  setEmployerExtractedFields(filledFields);
+                  console.log('[EmployerOCR] auto-filled fields:', filledFields.join(', '));
+                }
+              } catch (ocrError) {
+                console.error('[EmployerOCR] extraction failed:', ocrError);
+                merged = {
+                  ...formDataRef.current,
+                  employerReportPhotos: [...formDataRef.current.employerReportPhotos, { uri: photoUri, metadata: photoMetadata }],
+                } as COIDAFormData;
+              } finally {
+                setIsExtractingEmployer(false);
+                if (merged) await autoSaveDraft(merged);
+              }
+            })();
+          }
           break;
+        }
         case 'firstMedicalReport':
           console.log('Setting first medical report photo');
           setFormData(prev => ({ 
@@ -941,8 +986,6 @@ export default function COIDAFormScreen() {
       { field: formData.timeInTheatreClockPhoto, name: 'Time In Theatre Clock Photo' },
       { field: formData.timeInTheatre, name: 'Time in Theatre' },
       { field: formData.cArmImages.length > 0, name: 'C Arm Images' },
-      { field: formData.screeningTimePhoto, name: 'Screening Time Photo' },
-      { field: formData.fluoroscopyTime, name: 'Screening Time' },
       { field: formData.timeOutTheatreClockPhoto, name: 'Time Out Theatre Clock Photo' },
       { field: formData.timeOutTheatre, name: 'Time out Theatre' },
       { field: formData.patientFirstName, name: 'First Name' },
@@ -976,13 +1019,16 @@ export default function COIDAFormScreen() {
       
       if (currentFormId) {
         await updateDraft(currentFormId, formDataWithoutDicom as any);
-        Alert.alert('Success', 'Draft saved successfully!');
       } else {
         const draftData = isFromWorklist ? { ...formDataWithoutDicom, caseStatus: 'case_started' as const } : formDataWithoutDicom;
         const newFormId = await saveDraft(draftData as any);
         setCurrentFormId(newFormId);
-        Alert.alert('Success', 'Draft saved successfully!');
       }
+      // Stay in the form after saving - clear the unsaved-changes guard and show a brief toast
+      hasUnsavedChangesRef.current = false;
+      if (draftSavedTimerRef.current) clearTimeout(draftSavedTimerRef.current);
+      setDraftSavedVisible(true);
+      draftSavedTimerRef.current = setTimeout(() => setDraftSavedVisible(false), 2500);
     } catch (error) {
       console.error('Error saving draft:', error);
       Alert.alert('Error', 'Failed to save draft. Please try again.');
@@ -991,14 +1037,6 @@ export default function COIDAFormScreen() {
 
   const handleSubmit = async () => {
     if (!validateRequiredFields()) {
-      return;
-    }
-
-    if (!formData.patientConsentGiven) {
-      Alert.alert(
-        'POPIA Consent Required',
-        'Patient consent must be confirmed before submitting. Please review the Privacy Notice and tick the consent box.'
-      );
       return;
     }
 
@@ -1060,24 +1098,24 @@ export default function COIDAFormScreen() {
         `Patient Address: ${updatedFormData.patientAddress || 'N/A'}\n\n` +
         `Admission Date: ${updatedFormData.admissionDate || 'N/A'}\n` +
         `Admission Time: ${updatedFormData.admissionTime || 'N/A'}\n` +
-        `Hospital Name: ${updatedFormData.hospitalName || 'N/A'}\n\n` +
+        `Hospital Name: ${getHospitalName(user?.email, updatedFormData.hospitalName)}\n\n` +
         `COIDA Number: ${updatedFormData.coidaMemberNumber}\n` +
         `IOD Claim Number: ${updatedFormData.patientIodClaimNumber}\n` +
         `Employer: ${updatedFormData.employerName}\n` +
+        `Employer Code: ${updatedFormData.employerCode || 'N/A'}\n` +
+        `Employer Contact Person: ${updatedFormData.employerContactPerson || 'N/A'}\n` +
         `Employer Contact: ${updatedFormData.employerContact}\n` +
+        `Employer Address: ${updatedFormData.employerAddress || 'N/A'}\n` +
         `Date of Incident: ${updatedFormData.dateOfIncident}\n\n` +
         `ICD10 Code: ${updatedFormData.icd10Code || 'N/A'}\n` +
         `Procedures: ${proceduresList}\n` +
         `Date of Procedure: ${updatedFormData.dateOfProcedure}\n` +
-        `Fixed Installation: ${updatedFormData.fixedInstallation || 'N/A'}\n\n` +
+        `C-Arm owned by hospital: ${updatedFormData.fixedInstallation || 'N/A'}\n\n` +
         `Time In Theatre: ${updatedFormData.timeInTheatre}\n` +
         `Time Out Theatre: ${updatedFormData.timeOutTheatre}\n` +
-        `Screening Time: ${((): string => { const t = String(updatedFormData.fluoroscopyTime ?? ''); if (!t) return 'N/A'; if (t.includes(':')) { const [m, s] = t.split(':'); return String((parseInt(m, 10) || 0) * 60 + (parseInt(s, 10) || 0)); } return t; })()} (seconds)\n` +
-        `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Billing Practice: ${radiographerRecord?.prefix || radiographerRecord?.name || 'N/A'}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
-        `POPIA Consent: Obtained (${new Date(timestamp).toLocaleString()})\n` +
         (updatedFormData.submissionLatitude && updatedFormData.submissionLongitude
           ? `Location: ${updatedFormData.radiographerSignatureLocation} — https://maps.google.com/?q=${updatedFormData.submissionLatitude},${updatedFormData.submissionLongitude}\n\n`
           : `Location: ${updatedFormData.radiographerSignatureLocation}\n\n`) +
@@ -1291,7 +1329,12 @@ export default function COIDAFormScreen() {
         const isAvailable = await MailComposer.isAvailableAsync();
         if (isAvailable) {
           const mailResult = await MailComposer.composeAsync({
-            recipients: ['paul@intouchmedtech.co.za', 'nokuthula@debttec.co.za', 'allan@medimarketing100.co.za'],
+            recipients: [...new Set([
+              'paul@intouchmedtech.co.za',
+              'nokuthula@debttec.co.za',
+              'allan@medimarketing100.co.za',
+              ...getAdminCopyRecipients(user?.email),
+            ])],
             subject,
             body,
             attachments,
@@ -1394,7 +1437,7 @@ export default function COIDAFormScreen() {
           style={styles.camera}
           facing="back"
           ref={(ref) => setCameraRef(ref)}
-        >
+        />
           <View style={styles.cameraControls}>
             <TouchableOpacity
               style={styles.cameraButton}
@@ -1409,7 +1452,6 @@ export default function COIDAFormScreen() {
               <View style={styles.captureButtonInner} />
             </TouchableOpacity>
           </View>
-        </CameraView>
       </View>
     );
   }
@@ -1478,6 +1520,145 @@ export default function COIDAFormScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Theatre Clock</Text>
+
+          <View style={styles.photoField}>
+            <Text style={styles.label}>Photo of Theatre Clock for &quot;Time In Theatre&quot; *</Text>
+            {formData.timeInTheatreClockPhoto ? (
+              <View style={styles.photoPreview}>
+                <Image source={{ uri: formData.timeInTheatreClockPhoto }} style={styles.photoImage} />
+                {formData.timeInTheatreClockPhotoMetadata?.latitude != null && formData.timeInTheatreClockPhotoMetadata?.longitude != null && (
+                  <View style={styles.gpsBadge}>
+                    <MapPin size={12} color="#28A745" />
+                    <Text style={styles.gpsText}>{formData.timeInTheatreClockPhotoMetadata.latitude.toFixed(6)}, {formData.timeInTheatreClockPhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingClockIn && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#00A3A3" />
+                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.retakeButton}
+                  onPress={() => openCamera('timeInTheatreClock')}
+                  disabled={isReadOnly}
+                >
+                  <Text style={styles.retakeButtonText}>Retake</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={() => openCamera('timeInTheatreClock')}
+                disabled={isReadOnly}
+              >
+                <Camera size={24} color="#00A3A3" />
+                <Text style={styles.photoButtonText}>Take Photo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Time in Theatre *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.timeInTheatre}
+              onChangeText={(value) => handleTimeInput('timeInTheatre', value)}
+              placeholder="Enter time (e.g., 14H30)"
+              keyboardType="numeric"
+              maxLength={5}
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.photoField}>
+            <Text style={styles.label}>Photo of &quot;Time Out of theatre&quot; *</Text>
+            {formData.timeOutTheatreClockPhoto ? (
+              <View style={styles.photoPreview}>
+                <Image source={{ uri: formData.timeOutTheatreClockPhoto }} style={styles.photoImage} />
+                {formData.timeOutTheatreClockPhotoMetadata?.latitude != null && formData.timeOutTheatreClockPhotoMetadata?.longitude != null && (
+                  <View style={styles.gpsBadge}>
+                    <MapPin size={12} color="#28A745" />
+                    <Text style={styles.gpsText}>{formData.timeOutTheatreClockPhotoMetadata.latitude.toFixed(6)}, {formData.timeOutTheatreClockPhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingClockOut && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#00A3A3" />
+                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.retakeButton}
+                  onPress={() => openCamera('timeOutTheatreClock')}
+                  disabled={isReadOnly}
+                >
+                  <Text style={styles.retakeButtonText}>Retake</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={() => openCamera('timeOutTheatreClock')}
+                disabled={isReadOnly}
+              >
+                <Camera size={24} color="#00A3A3" />
+                <Text style={styles.photoButtonText}>Take Photo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Time out Theatre *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.timeOutTheatre}
+              onChangeText={(value) => handleTimeInput('timeOutTheatre', value)}
+              placeholder="Enter time (e.g., 16H45)"
+              keyboardType="numeric"
+              maxLength={5}
+              editable={!isReadOnly}
+            />
+          </View>
+
+          <View style={styles.photoField}>
+            <Text style={styles.label}>Photo of Image from C Arm (Multiple Images) *</Text>
+            {(formData.cArmImages ?? []).map((image, index) => (
+              <View key={index} style={styles.photoPreview}>
+                <Image source={{ uri: image.uri }} style={styles.photoImage} />
+                {image.metadata?.latitude != null && image.metadata?.longitude != null && (
+                  <View style={styles.gpsBadge}>
+                    <MapPin size={12} color="#28A745" />
+                    <Text style={styles.gpsText}>{image.metadata.latitude.toFixed(6)}, {image.metadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      cArmImages: prev.cArmImages.filter((_, i) => i !== index),
+                    }));
+                  }}
+                  disabled={isReadOnly}
+                >
+                  <Text style={styles.deleteButtonText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={styles.photoButton}
+              onPress={() => openCamera('cArmImage')}
+              disabled={isReadOnly}
+            >
+              <Camera size={24} color="#00A3A3" />
+              <Text style={styles.photoButtonText}>Add C Arm Image</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
           
           <View style={styles.field}>
@@ -1540,6 +1721,18 @@ export default function COIDAFormScreen() {
             />
           </View>
 
+          <View style={styles.field}>
+            <Text style={styles.label}>COIDA Number *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.coidaMemberNumber}
+              onChangeText={(value) => setFormData(prev => ({ ...prev, coidaMemberNumber: value }))}
+              placeholder="Enter COIDA number"
+              autoCapitalize="characters"
+              editable={!isReadOnly}
+            />
+          </View>
+
         </View>
 
         <View style={styles.section}>
@@ -1557,189 +1750,63 @@ export default function COIDAFormScreen() {
             />
           </View>
 
-          <View style={styles.photoField}>
-            <Text style={styles.label}>Photo of Theatre Clock for &quot;Time In Theatre&quot; *</Text>
-            {formData.timeInTheatreClockPhoto ? (
-              <View style={styles.photoPreview}>
-                <Image source={{ uri: formData.timeInTheatreClockPhoto }} style={styles.photoImage} />
-                {formData.timeInTheatreClockPhotoMetadata?.latitude != null && formData.timeInTheatreClockPhotoMetadata?.longitude != null && (
-                  <View style={styles.gpsBadge}>
-                    <MapPin size={12} color="#28A745" />
-                    <Text style={styles.gpsText}>{formData.timeInTheatreClockPhotoMetadata.latitude.toFixed(6)}, {formData.timeInTheatreClockPhotoMetadata.longitude.toFixed(6)}</Text>
-                  </View>
-                )}
-                {isExtractingClockIn && (
-                  <View style={styles.ocrLoadingBadge}>
-                    <ActivityIndicator size="small" color="#00A3A3" />
-                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.retakeButton}
-                  onPress={() => openCamera('timeInTheatreClock')}
-                  disabled={isReadOnly}
-                >
-                  <Text style={styles.retakeButtonText}>Retake</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => openCamera('timeInTheatreClock')}
-                disabled={isReadOnly}
+          <View style={styles.field}>
+            <Text style={styles.label}>Procedures *</Text>
+            <TouchableOpacity
+              style={styles.input}
+              onPress={() => setShowProcedurePicker(true)}
+              disabled={isReadOnly}
+            >
+              <Text
+                style={[
+                  { fontSize: 16 },
+                  formData.procedure.length > 0 ? { color: '#333333' } : { color: '#999999' },
+                ]}
               >
-                <Camera size={24} color="#00A3A3" />
-                <Text style={styles.photoButtonText}>Take Photo</Text>
-              </TouchableOpacity>
+                {formData.procedure.length > 0
+                  ? `${formData.procedure.length} procedure${formData.procedure.length > 1 ? 's' : ''} selected`
+                  : 'Select procedures'}
+              </Text>
+            </TouchableOpacity>
+            {formData.procedure.length > 0 && (
+              <View style={styles.selectedProceduresContainer}>
+                {formData.procedure.map((proc) => (
+                  <View key={proc} style={styles.selectedProcedureTag}>
+                    <Text style={styles.selectedProcedureText}>{proc}</Text>
+                    {!isReadOnly && (
+                      <TouchableOpacity
+                        style={styles.removeProcedureButton}
+                        onPress={() =>
+                          setFormData(prev => ({
+                            ...prev,
+                            procedure: prev.procedure.filter(p => p !== proc),
+                          }))
+                        }
+                      >
+                        <X size={14} color="#666666" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
             )}
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Time in Theatre *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.timeInTheatre}
-              onChangeText={(value) => handleTimeInput('timeInTheatre', value)}
-              placeholder="Enter time (e.g., 14H30)"
-              keyboardType="numeric"
-              maxLength={5}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.photoField}>
-            <Text style={styles.label}>Photo of Image from C Arm (Multiple Images) *</Text>
-            {(formData.cArmImages ?? []).map((image, index) => (
-              <View key={index} style={styles.photoPreview}>
-                <Image source={{ uri: image.uri }} style={styles.photoImage} />
-                {image.metadata?.latitude != null && image.metadata?.longitude != null && (
-                  <View style={styles.gpsBadge}>
-                    <MapPin size={12} color="#28A745" />
-                    <Text style={styles.gpsText}>{image.metadata.latitude.toFixed(6)}, {image.metadata.longitude.toFixed(6)}</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      cArmImages: prev.cArmImages.filter((_, i) => i !== index),
-                    }));
-                  }}
-                  disabled={isReadOnly}
-                >
-                  <Text style={styles.deleteButtonText}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+            <Text style={styles.label}>Date of Procedure</Text>
             <TouchableOpacity
-              style={styles.photoButton}
-              onPress={() => openCamera('cArmImage')}
+              style={styles.input}
+              onPress={() => setShowDateOfProcedurePicker(true)}
               disabled={isReadOnly}
             >
-              <Camera size={24} color="#00A3A3" />
-              <Text style={styles.photoButtonText}>Add C Arm Image</Text>
+              <Text style={{ fontSize: 16, color: '#333333' }}>
+                {formData.dateOfProcedure || 'Select date'}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.photoField}>
-            <Text style={styles.label}>Photo of Screening Time (in seconds) *</Text>
-            {formData.screeningTimePhoto ? (
-              <View style={styles.photoPreview}>
-                <Image source={{ uri: formData.screeningTimePhoto }} style={styles.photoImage} />
-                {formData.screeningTimePhotoMetadata?.latitude != null && formData.screeningTimePhotoMetadata?.longitude != null && (
-                  <View style={styles.gpsBadge}>
-                    <MapPin size={12} color="#28A745" />
-                    <Text style={styles.gpsText}>{formData.screeningTimePhotoMetadata.latitude.toFixed(6)}, {formData.screeningTimePhotoMetadata.longitude.toFixed(6)}</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.retakeButton}
-                  onPress={() => openCamera('screeningTime')}
-                  disabled={isReadOnly}
-                >
-                  <Text style={styles.retakeButtonText}>Retake</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => openCamera('screeningTime')}
-                disabled={isReadOnly}
-              >
-                <Camera size={24} color="#00A3A3" />
-                <Text style={styles.photoButtonText}>Take Photo</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
           <View style={styles.field}>
-            <Text style={styles.label}>Screening Time (seconds) *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.fluoroscopyTime}
-              onChangeText={(value) => {
-                const cleaned = value.replace(/\D/g, '');
-                setFormData(prev => ({ ...prev, fluoroscopyTime: cleaned }));
-              }}
-              placeholder="Enter screening time in seconds (e.g. 215)"
-              keyboardType="numeric"
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.photoField}>
-            <Text style={styles.label}>Photo of &quot;Time Out of theatre&quot; *</Text>
-            {formData.timeOutTheatreClockPhoto ? (
-              <View style={styles.photoPreview}>
-                <Image source={{ uri: formData.timeOutTheatreClockPhoto }} style={styles.photoImage} />
-                {formData.timeOutTheatreClockPhotoMetadata?.latitude != null && formData.timeOutTheatreClockPhotoMetadata?.longitude != null && (
-                  <View style={styles.gpsBadge}>
-                    <MapPin size={12} color="#28A745" />
-                    <Text style={styles.gpsText}>{formData.timeOutTheatreClockPhotoMetadata.latitude.toFixed(6)}, {formData.timeOutTheatreClockPhotoMetadata.longitude.toFixed(6)}</Text>
-                  </View>
-                )}
-                {isExtractingClockOut && (
-                  <View style={styles.ocrLoadingBadge}>
-                    <ActivityIndicator size="small" color="#00A3A3" />
-                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.retakeButton}
-                  onPress={() => openCamera('timeOutTheatreClock')}
-                  disabled={isReadOnly}
-                >
-                  <Text style={styles.retakeButtonText}>Retake</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => openCamera('timeOutTheatreClock')}
-                disabled={isReadOnly}
-              >
-                <Camera size={24} color="#00A3A3" />
-                <Text style={styles.photoButtonText}>Take Photo</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Time out Theatre *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.timeOutTheatre}
-              onChangeText={(value) => handleTimeInput('timeOutTheatre', value)}
-              placeholder="Enter time (e.g., 16H45)"
-              keyboardType="numeric"
-              maxLength={5}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Fixed Installation</Text>
+            <Text style={styles.label}>C-Arm owned by hospital</Text>
             <View style={styles.titleContainer}>
               {['Yes', 'No'].map((option) => (
                 <TouchableOpacity
@@ -1764,42 +1831,6 @@ export default function COIDAFormScreen() {
             </View>
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Reason for time in theatre longer than anesthetic time</Text>
-            <View style={styles.titleContainer}>
-              {['Surgeon Delay', 'Anaesthetist Delay', 'Technical Issue', 'Other'].map((reason) => (
-                <TouchableOpacity
-                  key={reason}
-                  style={[
-                    styles.titleButton,
-                    formData.reasonForTimeDiscrepancy === reason && styles.titleButtonActive,
-                  ]}
-                  onPress={() => setFormData(prev => ({ ...prev, reasonForTimeDiscrepancy: reason }))}
-                  disabled={isReadOnly}
-                >
-                  <Text
-                    style={[
-                      styles.titleButtonText,
-                      formData.reasonForTimeDiscrepancy === reason && styles.titleButtonTextActive,
-                    ]}
-                  >
-                    {reason}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {formData.reasonForTimeDiscrepancy === 'Other' && (
-              <TextInput
-                style={[styles.input, styles.textArea, { marginTop: 12 }]}
-                value={(formData as any).reasonForTimeDiscrepancyOther || ''}
-                onChangeText={(value) => setFormData(prev => ({ ...prev, reasonForTimeDiscrepancyOther: value } as any))}
-                placeholder="Please specify other reason"
-                multiline
-                numberOfLines={3}
-                editable={!isReadOnly}
-              />
-            )}
-          </View>
         </View>
 
         <View style={styles.section}>
@@ -1807,6 +1838,18 @@ export default function COIDAFormScreen() {
 
           <View style={styles.photoField}>
             <Text style={styles.label}>Photo of Department of Labour &quot;Employers Report&quot; (Multiple Pages) *</Text>
+            {isExtractingEmployer && (
+              <View style={styles.ocrLoadingBadge}>
+                <ActivityIndicator size="small" color="#00A3A3" />
+                <Text style={styles.ocrLoadingText}>Extracting employer details with AI...</Text>
+              </View>
+            )}
+            {!isExtractingEmployer && employerExtractedFields.length > 0 && (
+              <View style={styles.ocrSuccessBadge}>
+                <Sparkles size={14} color="#00A3A3" />
+                <Text style={styles.ocrSuccessText}>{employerExtractedFields.length} fields auto-filled from employers report</Text>
+              </View>
+            )}
             {formData.employerReportPhotos.map((photo, index) => (
               <View key={index} style={styles.photoPreview}>
                 <Image source={{ uri: photo.uri }} style={styles.photoImage} />
@@ -1974,7 +2017,6 @@ export default function COIDAFormScreen() {
             )}
           </View>
 
-
         </View>
 
         <View style={styles.section}>
@@ -1987,28 +2029,6 @@ export default function COIDAFormScreen() {
               value={formData.radiographerName}
               editable={false}
             />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Patient Consent (POPIA) *</Text>
-            <TouchableOpacity
-              style={styles.consentRow}
-              disabled={isReadOnly}
-              onPress={() => setFormData(prev => ({ ...prev, patientConsentGiven: !prev.patientConsentGiven }))}
-            >
-              <View style={[styles.consentCheckbox, formData.patientConsentGiven && styles.consentCheckboxChecked]}>
-                {formData.patientConsentGiven && <Check size={16} color="#FFFFFF" />}
-              </View>
-              <Text style={styles.consentText}>
-                The patient has received the Privacy Notice and gives informed consent for the
-                collection and processing of their personal and health information in terms of
-                POPIA, and for it to be shared with COIDA, the referring practitioner and
-                billing parties for claim purposes.
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowPrivacyNotice(true)}>
-              <Text style={styles.privacyLink}>Read the full Privacy Notice</Text>
-            </TouchableOpacity>
           </View>
 
           {formData.radiographerSignatureTimestamp && (
@@ -2062,6 +2082,13 @@ export default function COIDAFormScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {draftSavedVisible && (
+        <View style={styles.draftToast} pointerEvents="none">
+          <Check size={16} color="#FFFFFF" />
+          <Text style={styles.draftToastText}>Draft saved — continue with the form</Text>
+        </View>
+      )}
 
       <PrivacyNotice visible={showPrivacyNotice} onClose={() => setShowPrivacyNotice(false)} />
 
@@ -2324,6 +2351,29 @@ export default function COIDAFormScreen() {
 }
 
 const styles = StyleSheet.create({
+  draftToast: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#00A3A3',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    zIndex: 100,
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  draftToastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
@@ -2600,7 +2650,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cameraControls: {
-    flex: 1,
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'transparent',
     flexDirection: 'row',
     justifyContent: 'space-between',

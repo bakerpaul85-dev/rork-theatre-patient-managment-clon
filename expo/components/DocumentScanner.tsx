@@ -659,11 +659,12 @@ export default function DocumentScanner({ visible, onClose, onComplete }: Docume
     <Modal visible={visible} animationType="slide">
       <View style={styles.container}>
         {showCamera && !showCrop && !showPreview && (
+          <View style={styles.cameraFullScreen}>
           <CameraView
             ref={cameraRef}
             style={styles.camera}
             facing="back"
-          >
+          />
             <View style={styles.cameraOverlay} onLayout={handleCameraOverlayLayout}>
               <View style={styles.topBar}>
                 <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
@@ -732,7 +733,7 @@ export default function DocumentScanner({ visible, onClose, onComplete }: Docume
                 </TouchableOpacity>
               </View>
             </View>
-          </CameraView>
+          </View>
         )}
 
         {showPreview && processedUri && (
@@ -964,8 +965,15 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
-  cameraOverlay: {
+  cameraFullScreen: {
     flex: 1,
+  },
+  cameraOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   topBar: {

@@ -18,15 +18,17 @@ import * as Location from 'expo-location';
 import * as MailComposer from 'expo-mail-composer';
 import { generateHL7File } from '@/utils/hl7Generator';
 import { FormData as ContextFormData } from '@/contexts/FormsContext';
-import { Camera, X, Check, Save, Search, ChevronDown, XCircle, CheckSquare, Square, MapPin, Sparkles } from 'lucide-react-native';
+import { Camera, X, Check, Save, Search, ChevronDown, XCircle, CheckSquare, Square, MapPin, Sparkles, ScanLine, Plus, Trash } from 'lucide-react-native';
 import { MEDICAL_AID_NAMES } from '@/constants/medicalAids';
 import { PROCEDURE_OPTIONS } from '@/constants/procedures';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { extractStickerData, normalizeStickerData } from '@/utils/stickerOCR';
+import { extractStickerData, normalizeStickerData, extractClockTime, extractMedicalAidReferralData, normalizeMedicalAidReferralData } from '@/utils/stickerOCR';
+import { getHospitalName, getAdminCopyRecipients } from '@/utils/hospitalOverride';
 import PrivacyNotice from '@/components/PrivacyNotice';
+import DocumentScanner from '@/components/DocumentScanner';
 
 
 type Title = 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Prof';
@@ -81,6 +83,8 @@ interface FormData {
   patientConsentGiven?: boolean;
   patientConsentTimestamp?: string;
   radiographerSignatureLocation: string;
+  referralLetterPages: { uri: string; metadata?: PhotoMetadata }[];
+  referralLetterPDF?: string;
 }
 
 type CameraMode = 'hospitalSticker' | 'timeInTheatre' | 'timeOutTheatre' | null;
@@ -449,10 +453,17 @@ export default function MedicalAidFormScreen() {
   const [cameraRef, setCameraRef] = useState<any>(null);
   const [isExtractingSticker, setIsExtractingSticker] = useState<boolean>(false);
   const [stickerExtractedFields, setStickerExtractedFields] = useState<string[]>([]);
+  const [isExtractingClockIn, setIsExtractingClockIn] = useState<boolean>(false);
+  const [isExtractingClockOut, setIsExtractingClockOut] = useState<boolean>(false);
+  const [showDocumentScanner, setShowDocumentScanner] = useState<boolean>(false);
+  const [isExtractingReferral, setIsExtractingReferral] = useState<boolean>(false);
+  const [referralExtractedFields, setReferralExtractedFields] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollPositionRef = useRef<number>(0);
   const navigation = useNavigation();
   const hasUnsavedChangesRef = useRef<boolean>(false);
+  const [draftSavedVisible, setDraftSavedVisible] = useState<boolean>(false);
+  const draftSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const formatDateToDDMMYYYY = (date: Date): string => {
     const day = String(date.getDate()).padStart(2, '0');
@@ -527,6 +538,7 @@ export default function MedicalAidFormScreen() {
     patientConsentGiven: false,
     patientConsentTimestamp: '',
     radiographerSignatureLocation: '',
+    referralLetterPages: [],
   });
 
   const [formData, setFormData] = useState<FormData>(getInitialFormData());
@@ -567,7 +579,7 @@ export default function MedicalAidFormScreen() {
     if (params.formId && typeof params.formId === 'string') {
       const existingForm = getForm(params.formId);
       if (existingForm) {
-        setFormData({ ...getInitialFormData(), ...(existingForm as any) } as FormData);
+        setFormData({ ...getInitialFormData(), ...(existingForm as any), referralLetterPages: (existingForm as any).referralLetterPages ?? [] } as FormData);
         setCurrentFormId(params.formId);
         hasUnsavedChangesRef.current = false;
       }
@@ -817,25 +829,79 @@ export default function MedicalAidFormScreen() {
                 await autoSaveDraft(merged);
               } catch (ocrError) {
                 console.error('[StickerOCR] Extraction failed:', ocrError);
+                Alert.alert('AI Extraction Failed', ocrError instanceof Error ? ocrError.message : 'Please fill in the fields manually.');
               } finally {
                 setIsExtractingSticker(false);
               }
             })();
             break;
-          case 'timeInTheatre':
+          case 'timeInTheatre': {
+            console.log('Setting time in theatre clock photo');
             setFormData(prev => ({ 
               ...prev, 
               timeInTheatrePhoto: photoUri,
               timeInTheatrePhotoMetadata: metadata,
             }));
+            void (async () => {
+              setIsExtractingClockIn(true);
+              try {
+                const clockTime = await extractClockTime(photoUri);
+                if (clockTime) {
+                  const merged = {
+                    ...formDataRef.current,
+                    timeInTheatrePhoto: photoUri,
+                    timeInTheatrePhotoMetadata: metadata,
+                    timeCArmTakenIn: clockTime,
+                  } as FormData;
+                  setFormData(merged);
+                  console.log('[ClockOCR] Time C Arm Taken In auto-filled:', clockTime);
+                }
+              } catch (clockError) {
+                console.error('[ClockOCR] Time C Arm Taken In extraction failed:', clockError);
+              } finally {
+                setIsExtractingClockIn(false);
+              }
+            })();
             break;
-          case 'timeOutTheatre':
+          }
+          case 'timeOutTheatre': {
+            console.log('Setting time out theatre clock photo');
             setFormData(prev => ({ 
               ...prev, 
               timeOutTheatrePhoto: photoUri,
               timeOutTheatrePhotoMetadata: metadata,
             }));
+            void (async () => {
+              setIsExtractingClockOut(true);
+              let merged: FormData | null = null;
+              try {
+                const clockTime = await extractClockTime(photoUri);
+                merged = {
+                  ...formDataRef.current,
+                  timeOutTheatrePhoto: photoUri,
+                  timeOutTheatrePhotoMetadata: metadata,
+                  ...(clockTime ? { timeCArmTakenOut: clockTime } : {}),
+                } as FormData;
+                setFormData(merged);
+                if (clockTime) {
+                  console.log('[ClockOCR] Time C Arm Taken Out auto-filled:', clockTime);
+                }
+              } catch (clockError) {
+                console.error('[ClockOCR] Time C Arm Taken Out extraction failed:', clockError);
+                merged = {
+                  ...formDataRef.current,
+                  timeOutTheatrePhoto: photoUri,
+                  timeOutTheatrePhotoMetadata: metadata,
+                } as FormData;
+                setFormData(merged);
+              } finally {
+                setIsExtractingClockOut(false);
+                // Auto-save draft once Time Out of Theatre is captured
+                if (merged) await autoSaveDraft(merged);
+              }
+            })();
             break;
+          }
         }
         
         setShowCamera(false);
@@ -848,6 +914,85 @@ export default function MedicalAidFormScreen() {
         console.error('Error taking picture:', error);
         Alert.alert('Error', 'Failed to take picture. Please try again.');
       }
+    }
+  };
+
+  const convertImagesToPDF = async (base64Images: string[], filename: string = 'document.pdf'): Promise<{
+    base64: string;
+    filename: string;
+  } | null> => {
+    try {
+      const { convertImagesToPDF: pdfConvert } = await import('@/utils/pdfConverter');
+      return pdfConvert(base64Images, filename, true);
+    } catch (err) {
+      console.error('PDF conversion failed:', err);
+      return null;
+    }
+  };
+
+  /**
+   * Receive scanned referral letter pages from the DocumentScanner, merge them
+   * into the form, then auto-fill fields from the first page with AI.
+   */
+  const handleScanComplete = (pdfBase64: string | null, pages: Array<{ uri: string; timestamp?: string; latitude?: number; longitude?: number }>) => {
+    console.log('Document scanner complete:', pages.length, 'pages');
+
+    const pagesWithMetadata = pages.map(page => ({
+      uri: page.uri,
+      metadata: {
+        timestamp: page.timestamp,
+        ...(page.latitude != null && { latitude: page.latitude }),
+        ...(page.longitude != null && { longitude: page.longitude }),
+      },
+    }));
+
+    const merged = {
+      ...formDataRef.current,
+      referralLetterPages: [...formDataRef.current.referralLetterPages, ...pagesWithMetadata],
+      referralLetterPDF: pdfBase64 ? `data:application/pdf;base64,${pdfBase64}` : formDataRef.current.referralLetterPDF,
+    } as FormData;
+    setFormData(merged);
+
+    setShowDocumentScanner(false);
+
+    if (pdfBase64) {
+      Alert.alert('Success', `${pages.length} page(s) scanned and converted to PDF`);
+    } else {
+      Alert.alert('Success', `${pages.length} page(s) added (images only on native)`);
+    }
+
+    const firstPageUri = pagesWithMetadata[0]?.uri;
+    if (firstPageUri) {
+      void (async () => {
+        setIsExtractingReferral(true);
+        let aiMerged: FormData = merged;
+        try {
+          const extracted = await extractMedicalAidReferralData(firstPageUri);
+          const normalized = normalizeMedicalAidReferralData(extracted);
+          if (normalized.medicalAidName) {
+            normalized.medicalAidName = matchMedicalAidName(String(normalized.medicalAidName));
+          }
+          const filledFields = Object.keys(normalized);
+          aiMerged = {
+            ...merged,
+            ...normalized,
+          } as FormData;
+          setFormData(aiMerged);
+          if (filledFields.length > 0) {
+            setReferralExtractedFields(filledFields);
+            console.log('[ReferralOCR] Medical Aid auto-filled fields:', filledFields.join(', '));
+          }
+        } catch (ocrError) {
+          console.error('[ReferralOCR] extraction failed:', ocrError);
+          Alert.alert('AI Extraction Failed', ocrError instanceof Error ? ocrError.message : 'Please fill in the fields manually.');
+        } finally {
+          setIsExtractingReferral(false);
+          // Auto-save draft once the referral letter has been scanned
+          await autoSaveDraft(aiMerged);
+        }
+      })();
+    } else {
+      void autoSaveDraft(merged);
     }
   };
 
@@ -899,13 +1044,16 @@ export default function MedicalAidFormScreen() {
     try {
       if (currentFormId) {
         await updateDraft(currentFormId, formData);
-        Alert.alert('Success', 'Draft saved successfully!');
       } else {
         const draftData = isFromWorklist ? { ...formData, caseStatus: 'case_started' as const } : formData;
         const newFormId = await saveDraft(draftData as any);
         setCurrentFormId(newFormId);
-        Alert.alert('Success', 'Draft saved successfully!');
       }
+      // Stay in the form after saving - clear the unsaved-changes guard and show a brief toast
+      hasUnsavedChangesRef.current = false;
+      if (draftSavedTimerRef.current) clearTimeout(draftSavedTimerRef.current);
+      setDraftSavedVisible(true);
+      draftSavedTimerRef.current = setTimeout(() => setDraftSavedVisible(false), 2500);
     } catch (error) {
       console.error('Error saving draft:', error);
       Alert.alert('Error', 'Failed to save draft. Please try again.');
@@ -914,14 +1062,6 @@ export default function MedicalAidFormScreen() {
 
   const handleSubmit = async () => {
     if (!validateRequiredFields()) {
-      return;
-    }
-
-    if (!formData.patientConsentGiven) {
-      Alert.alert(
-        'POPIA Consent Required',
-        'Patient consent must be confirmed before submitting. Please review the Privacy Notice and tick the consent box.'
-      );
       return;
     }
 
@@ -972,7 +1112,7 @@ export default function MedicalAidFormScreen() {
         `Work Phone: ${updatedFormData.workPhone || 'N/A'}\n` +
         `Email: ${updatedFormData.email}\n` +
         `Patient Address: ${updatedFormData.patientAddress || 'N/A'}\n\n` +
-        `Hospital/Service Provider: ${updatedFormData.hospitalServiceProvider}\n` +
+        `Hospital/Service Provider: ${getHospitalName(user?.email, updatedFormData.hospitalServiceProvider)}\n` +
         `Admission Date: ${updatedFormData.admissionDate || 'N/A'}\n` +
         `Admission Time: ${updatedFormData.admissionTime || 'N/A'}\n` +
         `Referring Doctor: ${updatedFormData.referringDoctor}\n` +
@@ -993,10 +1133,8 @@ export default function MedicalAidFormScreen() {
         `Time C Arm In: ${updatedFormData.timeCArmTakenIn}\n` +
         `Time C Arm Out: ${updatedFormData.timeCArmTakenOut}\n` +
         `Screening Time: ${((): string => { const t = String(updatedFormData.screeningTimeText ?? ''); if (!t) return 'N/A'; if (t.includes(':')) return t; const s = parseInt(t, 10); if (isNaN(s)) return t; const m = Math.floor(s / 60); const sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}`; })()}\n` +
-        `${updatedFormData.reasonForTimeDiscrepancy ? `Reason for Time Discrepancy: ${updatedFormData.reasonForTimeDiscrepancy}\n` : ''}\n` +
         `Radiographer: ${updatedFormData.radiographerName}\n` +
         `Signed: ${new Date(timestamp).toLocaleString()}\n` +
-        `POPIA Consent: Obtained (${new Date(timestamp).toLocaleString()})\n` +
         (updatedFormData.submissionLatitude && updatedFormData.submissionLongitude
           ? `Location: ${updatedFormData.radiographerSignatureLocation} — https://maps.google.com/?q=${updatedFormData.submissionLatitude},${updatedFormData.submissionLongitude}\n\n`
           : `Location: ${updatedFormData.radiographerSignatureLocation}\n\n`) +
@@ -1009,7 +1147,14 @@ export default function MedicalAidFormScreen() {
           : updatedFormData.timeInTheatrePhoto ? `Time In Theatre Photo: No GPS data\n` : '') +
         (updatedFormData.timeOutTheatrePhotoMetadata?.latitude != null
           ? `Time Out Theatre Photo: https://maps.google.com/?q=${updatedFormData.timeOutTheatrePhotoMetadata.latitude},${updatedFormData.timeOutTheatrePhotoMetadata.longitude} (${updatedFormData.timeOutTheatrePhotoMetadata.timestamp})\n`
-          : updatedFormData.timeOutTheatrePhoto ? `Time Out Theatre Photo: No GPS data\n` : '');
+          : updatedFormData.timeOutTheatrePhoto ? `Time Out Theatre Photo: No GPS data\n` : '') +
+        (updatedFormData.referralLetterPages?.length
+          ? updatedFormData.referralLetterPages.map((img, i) =>
+              img.metadata?.latitude != null && img.metadata?.longitude != null
+                ? `Referral Letter Page ${i + 1}: https://maps.google.com/?q=${img.metadata.latitude},${img.metadata.longitude} (${img.metadata.timestamp})\n`
+                : `Referral Letter Page ${i + 1}: No GPS data\n`
+            ).join('')
+          : '');
 
       try {
         console.log('Opening native mail composer for Medical Aid form...');
@@ -1061,6 +1206,39 @@ export default function MedicalAidFormScreen() {
             const path = await saveBase64ToFile(updatedFormData.timeOutTheatrePhoto, 'clock_out_theatre.jpg');
             if (path) attachments.push(path);
           }
+          if (updatedFormData.referralLetterPages?.length) {
+            try {
+              const MAX_PDF_PAGES = 20;
+              const pagesToConvert = updatedFormData.referralLetterPages.slice(0, MAX_PDF_PAGES);
+              if (updatedFormData.referralLetterPages.length > MAX_PDF_PAGES) {
+                console.warn(`Limiting PDF to ${MAX_PDF_PAGES} pages (had ${updatedFormData.referralLetterPages.length})`);
+              }
+              if (updatedFormData.referralLetterPDF) {
+                console.log('Using existing referral letter PDF');
+                const path = await saveBase64ToFile(updatedFormData.referralLetterPDF, 'referral_letter.pdf');
+                if (path) attachments.push(path);
+              } else if (pagesToConvert.length > 0) {
+                console.log('Converting referral letter pages to PDF...');
+                const imageUris = pagesToConvert.map(p => p.uri).filter(Boolean);
+                const result = await convertImagesToPDF(imageUris, 'referral_letter.pdf');
+                const pdfBase64 = result?.base64;
+                if (pdfBase64) {
+                  const path = await saveBase64ToFile(`data:application/pdf;base64,${pdfBase64}`, 'referral_letter.pdf');
+                  if (path) attachments.push(path);
+                  console.log('Referral letter PDF created and attached');
+                }
+              }
+            } catch (pdfErr) {
+              console.error('Failed to create referral letter PDF, falling back to JPEGs:', pdfErr);
+              for (let i = 0; i < updatedFormData.referralLetterPages.length; i++) {
+                const img = updatedFormData.referralLetterPages[i];
+                if (img.uri) {
+                  const path = await saveBase64ToFile(img.uri, `referral_letter_${i + 1}.jpg`);
+                  if (path) attachments.push(path);
+                }
+              }
+            }
+          }
 
           try {
             const hl7FormData = {
@@ -1088,7 +1266,12 @@ export default function MedicalAidFormScreen() {
         const isAvailable = await MailComposer.isAvailableAsync();
         if (isAvailable) {
           const mailResult = await MailComposer.composeAsync({
-            recipients: ['paul@intouchmedtech.co.za', 'jenny@centaurimedical.co.za', 'kevin@centaurimedical.co.za'],
+            recipients: [...new Set([
+              'paul@intouchmedtech.co.za',
+              'jenny@centaurimedical.co.za',
+              'kevin@centaurimedical.co.za',
+              ...getAdminCopyRecipients(user?.email),
+            ])],
             subject,
             body,
             attachments,
@@ -1130,7 +1313,7 @@ export default function MedicalAidFormScreen() {
           style={styles.camera}
           facing="back"
           ref={(ref) => setCameraRef(ref)}
-        >
+        />
           <View style={styles.cameraControls}>
             <TouchableOpacity
               style={styles.cameraButton}
@@ -1145,7 +1328,6 @@ export default function MedicalAidFormScreen() {
               <View style={styles.captureButtonInner} />
             </TouchableOpacity>
           </View>
-        </CameraView>
       </View>
     );
   }
@@ -1208,6 +1390,180 @@ export default function MedicalAidFormScreen() {
               >
                 <Camera size={24} color="#0066CC" />
                 <Text style={styles.photoButtonText}>Take Photo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Theatre Clock</Text>
+
+          <View style={styles.photoField}>
+            <Text style={styles.label}>Clock In Theatre *</Text>
+            {formData.timeInTheatrePhoto ? (
+              <View style={styles.photoPreview}>
+                <Image source={{ uri: formData.timeInTheatrePhoto }} style={styles.photoImage} />
+                {formData.timeInTheatrePhotoMetadata?.latitude != null && formData.timeInTheatrePhotoMetadata?.longitude != null && (
+                  <View style={styles.gpsBadge}>
+                    <MapPin size={12} color="#28A745" />
+                    <Text style={styles.gpsText}>{formData.timeInTheatrePhotoMetadata.latitude.toFixed(6)}, {formData.timeInTheatrePhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingClockIn && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#0066CC" />
+                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.retakeButton}
+                  onPress={() => openCamera('timeInTheatre')}
+                >
+                  <Text style={styles.retakeButtonText}>Retake</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={() => openCamera('timeInTheatre')}
+              >
+                <Camera size={24} color="#0066CC" />
+                <Text style={styles.photoButtonText}>Take Photo of Theatre Clock</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Time C Arm Taken In *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.timeCArmTakenIn}
+              onChangeText={(value) => handleTimeInput('timeCArmTakenIn', value)}
+              placeholder="Enter time (e.g., 14H30)"
+              keyboardType="numeric"
+              maxLength={5}
+            />
+          </View>
+
+          <View style={styles.photoField}>
+            <Text style={styles.label}>Clock Out Theatre *</Text>
+            {formData.timeOutTheatrePhoto ? (
+              <View style={styles.photoPreview}>
+                <Image source={{ uri: formData.timeOutTheatrePhoto }} style={styles.photoImage} />
+                {formData.timeOutTheatrePhotoMetadata?.latitude != null && formData.timeOutTheatrePhotoMetadata?.longitude != null && (
+                  <View style={styles.gpsBadge}>
+                    <MapPin size={12} color="#28A745" />
+                    <Text style={styles.gpsText}>{formData.timeOutTheatrePhotoMetadata.latitude.toFixed(6)}, {formData.timeOutTheatrePhotoMetadata.longitude.toFixed(6)}</Text>
+                  </View>
+                )}
+                {isExtractingClockOut && (
+                  <View style={styles.ocrLoadingBadge}>
+                    <ActivityIndicator size="small" color="#0066CC" />
+                    <Text style={styles.ocrLoadingText}>Reading time from clock photo...</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.retakeButton}
+                  onPress={() => openCamera('timeOutTheatre')}
+                >
+                  <Text style={styles.retakeButtonText}>Retake</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={() => openCamera('timeOutTheatre')}
+              >
+                <Camera size={24} color="#0066CC" />
+                <Text style={styles.photoButtonText}>Take Photo of Theatre Clock</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Time C Arm Taken Out *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.timeCArmTakenOut}
+              onChangeText={(value) => handleTimeInput('timeCArmTakenOut', value)}
+              placeholder="Enter time (e.g., 16H45)"
+              keyboardType="numeric"
+              maxLength={5}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Referral Letter</Text>
+
+          <View style={styles.photoField}>
+            <Text style={styles.label}>Photo of Referral Letter</Text>
+            <Text style={styles.labelSubtitle}>Document will be automatically enhanced and converted to PDF. Scanned pages are analysed by an automated AI service to pre-fill form fields (see Privacy Notice).</Text>
+            {isExtractingReferral && (
+              <View style={styles.ocrLoadingBadge}>
+                <ActivityIndicator size="small" color="#0066CC" />
+                <Text style={styles.ocrLoadingText}>Extracting referral details with AI...</Text>
+              </View>
+            )}
+            {!isExtractingReferral && referralExtractedFields.length > 0 && (
+              <View style={styles.ocrSuccessBadge}>
+                <Sparkles size={14} color="#0066CC" />
+                <Text style={styles.ocrSuccessText}>{referralExtractedFields.length} fields auto-filled from referral</Text>
+              </View>
+            )}
+            {formData.referralLetterPages.length > 0 ? (
+              <>
+                {formData.referralLetterPages.map((page, index) => (
+                  <View key={index} style={styles.photoPreview}>
+                    <Text style={styles.pageNumber}>Page {index + 1} of {formData.referralLetterPages.length}</Text>
+                    <Image source={{ uri: page.uri }} style={styles.photoImage} />
+                    {page.metadata?.latitude != null && page.metadata?.longitude != null && (
+                      <View style={styles.gpsBadge}>
+                        <MapPin size={12} color="#28A745" />
+                        <Text style={styles.gpsText}>{page.metadata.latitude.toFixed(6)}, {page.metadata.longitude.toFixed(6)}</Text>
+                      </View>
+                    )}
+                    {!isReadOnly && (
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            referralLetterPages: prev.referralLetterPages.filter((_, i) => i !== index),
+                            referralLetterPDF: undefined,
+                          }));
+                        }}
+                      >
+                        <Trash size={16} color="#FFFFFF" />
+                        <Text style={styles.deleteButtonText}>Remove Page</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+                {formData.referralLetterPDF && (
+                  <View style={styles.scanBadge}>
+                    <ScanLine size={16} color="#0066CC" />
+                    <Text style={styles.scanBadgeText}>Scanned & Converted to PDF</Text>
+                  </View>
+                )}
+                {!isReadOnly && (
+                  <TouchableOpacity
+                    style={[styles.photoButton, { marginTop: 12 }]}
+                    onPress={() => setShowDocumentScanner(true)}
+                  >
+                    <Plus size={20} color="#0066CC" />
+                    <Text style={styles.photoButtonText}>Add More Pages</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={() => !isReadOnly && setShowDocumentScanner(true)}
+                disabled={isReadOnly}
+              >
+                <ScanLine size={24} color="#0066CC" />
+                <Text style={styles.photoButtonText}>Scan Document</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1599,88 +1955,6 @@ export default function MedicalAidFormScreen() {
             />
           </View>
 
-          <View style={styles.photoField}>
-            <Text style={styles.label}>Clock In Theatre *</Text>
-            {formData.timeInTheatrePhoto ? (
-              <View style={styles.photoPreview}>
-                <Image source={{ uri: formData.timeInTheatrePhoto }} style={styles.photoImage} />
-                {formData.timeInTheatrePhotoMetadata?.latitude != null && formData.timeInTheatrePhotoMetadata?.longitude != null && (
-                  <View style={styles.gpsBadge}>
-                    <MapPin size={12} color="#28A745" />
-                    <Text style={styles.gpsText}>{formData.timeInTheatrePhotoMetadata.latitude.toFixed(6)}, {formData.timeInTheatrePhotoMetadata.longitude.toFixed(6)}</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.retakeButton}
-                  onPress={() => openCamera('timeInTheatre')}
-                >
-                  <Text style={styles.retakeButtonText}>Retake</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => openCamera('timeInTheatre')}
-              >
-                <Camera size={24} color="#0066CC" />
-                <Text style={styles.photoButtonText}>Take Photo of Theatre Clock</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Time C Arm Taken In *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.timeCArmTakenIn}
-              onChangeText={(value) => handleTimeInput('timeCArmTakenIn', value)}
-              placeholder="Enter time (e.g., 14H30)"
-              keyboardType="numeric"
-              maxLength={5}
-            />
-          </View>
-
-          <View style={styles.photoField}>
-            <Text style={styles.label}>Clock Out Theatre *</Text>
-            {formData.timeOutTheatrePhoto ? (
-              <View style={styles.photoPreview}>
-                <Image source={{ uri: formData.timeOutTheatrePhoto }} style={styles.photoImage} />
-                {formData.timeOutTheatrePhotoMetadata?.latitude != null && formData.timeOutTheatrePhotoMetadata?.longitude != null && (
-                  <View style={styles.gpsBadge}>
-                    <MapPin size={12} color="#28A745" />
-                    <Text style={styles.gpsText}>{formData.timeOutTheatrePhotoMetadata.latitude.toFixed(6)}, {formData.timeOutTheatrePhotoMetadata.longitude.toFixed(6)}</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.retakeButton}
-                  onPress={() => openCamera('timeOutTheatre')}
-                >
-                  <Text style={styles.retakeButtonText}>Retake</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => openCamera('timeOutTheatre')}
-              >
-                <Camera size={24} color="#0066CC" />
-                <Text style={styles.photoButtonText}>Take Photo of Theatre Clock</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Time C Arm Taken Out *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.timeCArmTakenOut}
-              onChangeText={(value) => handleTimeInput('timeCArmTakenOut', value)}
-              placeholder="Enter time (e.g., 16H45)"
-              keyboardType="numeric"
-              maxLength={5}
-            />
-          </View>
-
           <View style={styles.field}>
             <Text style={styles.label}>Screening Time (min:sec)</Text>
             <TextInput
@@ -1775,41 +2049,6 @@ export default function MedicalAidFormScreen() {
               </View>
             </>
           )}
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Reason for time in theatre longer than anesthetic time</Text>
-            <View style={styles.titleContainer}>
-              {['Surgeon Delay', 'Anaesthetist Delay', 'Technical Issue', 'Other'].map((reason) => (
-                <TouchableOpacity
-                  key={reason}
-                  style={[
-                    styles.titleButton,
-                    formData.reasonForTimeDiscrepancy === reason && styles.titleButtonActive,
-                  ]}
-                  onPress={() => setFormData(prev => ({ ...prev, reasonForTimeDiscrepancy: reason }))}
-                >
-                  <Text
-                    style={[
-                      styles.titleButtonText,
-                      formData.reasonForTimeDiscrepancy === reason && styles.titleButtonTextActive,
-                    ]}
-                  >
-                    {reason}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {formData.reasonForTimeDiscrepancy === 'Other' && (
-              <TextInput
-                style={[styles.input, styles.textArea, { marginTop: 12 }]}
-                value={(formData as any).reasonForTimeDiscrepancyOther || ''}
-                onChangeText={(value) => setFormData(prev => ({ ...prev, reasonForTimeDiscrepancyOther: value } as any))}
-                placeholder="Please specify other reason"
-                multiline
-                numberOfLines={3}
-              />
-            )}
-          </View>
         </View>
 
         <View style={styles.section}>
@@ -1822,28 +2061,6 @@ export default function MedicalAidFormScreen() {
               value={formData.radiographerName}
               editable={false}
             />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Patient Consent (POPIA) *</Text>
-            <TouchableOpacity
-              style={styles.consentRow}
-              disabled={isReadOnly}
-              onPress={() => setFormData(prev => ({ ...prev, patientConsentGiven: !prev.patientConsentGiven }))}
-            >
-              <View style={[styles.consentCheckbox, formData.patientConsentGiven && styles.consentCheckboxChecked]}>
-                {formData.patientConsentGiven && <Check size={16} color="#FFFFFF" />}
-              </View>
-              <Text style={styles.consentText}>
-                The patient has received the Privacy Notice and gives informed consent for the
-                collection and processing of their personal and health information in terms of
-                POPIA, and for it to be shared with the medical scheme, referring practitioner
-                and billing parties for claim purposes.
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowPrivacyNotice(true)}>
-              <Text style={styles.privacyLink}>Read the full Privacy Notice</Text>
-            </TouchableOpacity>
           </View>
 
           {formData.radiographerSignatureTimestamp && (
@@ -1879,12 +2096,48 @@ export default function MedicalAidFormScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
+      {draftSavedVisible && (
+        <View style={styles.draftToast} pointerEvents="none">
+          <Check size={16} color="#FFFFFF" />
+          <Text style={styles.draftToastText}>Draft saved — continue with the form</Text>
+        </View>
+      )}
+
       <PrivacyNotice visible={showPrivacyNotice} onClose={() => setShowPrivacyNotice(false)} />
+
+      <DocumentScanner
+        visible={showDocumentScanner}
+        onClose={() => setShowDocumentScanner(false)}
+        onComplete={handleScanComplete}
+      />
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  draftToast: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#00A3A3',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    zIndex: 100,
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  draftToastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
@@ -2120,7 +2373,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cameraControls: {
-    flex: 1,
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'transparent',
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2195,6 +2452,52 @@ const styles = StyleSheet.create({
   ocrSuccessText: {
     fontSize: 12,
     color: '#0066CC',
+    fontWeight: '600' as const,
+  },
+  labelSubtitle: {
+    fontSize: 12,
+    color: '#6C757D',
+    marginTop: -4,
+    marginBottom: 8,
+    fontStyle: 'italic' as const,
+  },
+  scanBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: '#E7F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+    alignSelf: 'flex-start' as const,
+  },
+  scanBadgeText: {
+    fontSize: 12,
+    color: '#0066CC',
+    fontWeight: '600' as const,
+  },
+  pageNumber: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#0066CC',
+    marginBottom: 8,
+    textAlign: 'center' as const,
+  },
+  deleteButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: '#DC3545',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start' as const,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '600' as const,
   },
 });

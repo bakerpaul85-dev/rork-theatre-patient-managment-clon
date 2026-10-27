@@ -10,6 +10,19 @@
       "name": "Theatre Patient Management",
       "path": "expo",
       "framework": "react-native"
+    },
+    {
+      "name": "Theatre Downloads",
+      "path": "web-theatre-downloads",
+      "framework": "web"
+    },
+    {
+      "name": "Theatre Patient Management",
+      "path": "ios-theatre-patient-mgmt",
+      "framework": "swift",
+      "settings": {
+        "swiftSibling": false
+      }
     }
   ]
 }

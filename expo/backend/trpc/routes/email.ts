@@ -47,6 +47,8 @@ const FormDataSchema = z.object({
   timeOutTheatre: z.string().optional(),
   fluoroscopyTime: z.string().optional(),
   // General fields
+  submittedByEmail: z.string().optional(),
+  radiographerEmail: z.string().optional(),
   procedure: z.union([z.string(), z.array(z.string())]).optional(),
   icd10Code: z.string().optional(),
   timeCArmTakenIn: z.string().optional(),
@@ -75,6 +77,10 @@ const FormDataSchema = z.object({
   // Generic catch-all for extra fields
   additionalData: z.record(z.string(), z.any()).optional(),
 }).passthrough();
+
+// Hardcoded hospital/service provider override — applied only for the configured user
+const HOSPITAL_NAME = 'Winny Solutions';
+const HOSPITAL_OVERRIDE_EMAIL = 'kgmoropane@winnysolutions.co.za';
 
 const AttachmentSchema = z.object({
   filename: z.string(),
@@ -200,7 +206,12 @@ export const emailRouter = createTRPCRouter({
       ];
 
       const headerSection = form.formType === 'medical-aid' ? [
-        `Hospital/Service Provider: ${form.hospitalServiceProvider || 'N/A'}`,
+        `Hospital/Service Provider: ${[
+          form.submittedByEmail,
+          form.radiographerEmail,
+        ].some(e => (e ?? '').toLowerCase().trim() === HOSPITAL_OVERRIDE_EMAIL)
+          ? HOSPITAL_NAME
+          : (form.hospitalServiceProvider || 'N/A')}`,
         `Referring Doctor: ${form.referringDoctor || 'N/A'}`,
         `Doctor Practice Number: ${form.doctorPracticeNumber || 'N/A'}`,
       ] : [];
@@ -296,18 +307,20 @@ export const emailRouter = createTRPCRouter({
       console.log(`Attachments: ${emailAttachments.length}`);
 
       try {
-        const toRecipients = ['paul@intouchmedtech.co.za'];
-        
-        if (form.formType === 'medical-aid') {
-          toRecipients.push('kevin@centaurimedical.co.za', 'jenny@centaurimedical.co.za');
-        } else {
-          toRecipients.push('nokuthula@debttec.co.za');
+        const submitterEmails = [form.submittedByEmail, form.radiographerEmail]
+          .map(e => (e ?? '').toLowerCase().trim());
+        // KG Moropane's accounts (admin email + linked Gmail) also copy the admin address
+        const KG_ACCOUNT_EMAILS = ['kgmoropane@winnysolutions.co.za', 'siphiwesmall79@gmail.com'];
+        const toRecipients = form.formType === 'medical-aid'
+          ? ['paul@intouchmedtech.co.za', 'jenny@centaurimedical.co.za', 'kevin@centaurimedical.co.za']
+          : ['paul@intouchmedtech.co.za', 'nokuthula@debttec.co.za', 'allan@medimarketing100.co.za'];
+        if (submitterEmails.some(e => KG_ACCOUNT_EMAILS.includes(e))) {
+          toRecipients.push('kgmoropane@winnysolutions.co.za');
         }
-        
+
         const result = await resend.emails.send({
           from: 'Theatre patient management <noreply@advanceddiagnostic.co.za>',
           to: toRecipients,
-          cc: ['allan@medimarketing100.co.za'],
           subject: `${formTypeName} Form - ${patientName || 'Unknown Patient'}`,
           text: fullBody,
           attachments: emailAttachments.map(att => ({
