@@ -17,6 +17,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import * as MailComposer from 'expo-mail-composer';
 import { generateHL7File } from '@/utils/hl7Generator';
+import { newAttachmentSession, pruneOldAttachments } from '@/utils/emailAttachments';
 import { FormData as ContextFormData } from '@/contexts/FormsContext';
 import { Camera, X, Check, Save, Search, ChevronDown, XCircle, CheckSquare, Square, MapPin, Sparkles, ScanLine, Plus, Trash } from 'lucide-react-native';
 import { MEDICAL_AID_NAMES } from '@/constants/medicalAids';
@@ -1165,6 +1166,8 @@ export default function MedicalAidFormScreen() {
           try {
             await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
           } catch {}
+          await pruneOldAttachments(tempDir);
+          const attachmentPath = newAttachmentSession(tempDir);
 
           const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
           let totalAttachmentSize = 0;
@@ -1181,7 +1184,7 @@ export default function MedicalAidFormScreen() {
                 console.warn(`Skipping attachment ${filename}: total would exceed 15MB`);
                 return null;
               }
-              const filePath = `${tempDir}${filename}`;
+              const filePath = attachmentPath(filename);
               await FileSystem.writeAsStringAsync(filePath, base64Data, {
                 encoding: FileSystem.EncodingType.Base64,
               });
@@ -1249,7 +1252,7 @@ export default function MedicalAidFormScreen() {
               updatedAt: new Date().toISOString(),
             } as any as ContextFormData;
             const hl7File = generateHL7File(hl7FormData);
-            const hl7Path = `${tempDir}${hl7File.filename}`;
+            const hl7Path = attachmentPath(hl7File.filename);
             await FileSystem.writeAsStringAsync(hl7Path, hl7File.content, {
               encoding: FileSystem.EncodingType.UTF8,
             });

@@ -22,6 +22,7 @@ import { Camera, X, Check, Save, FileSpreadsheet, ChevronDown, Scan, Plus, Trash
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms, PhotoMetadata } from '@/contexts/FormsContext';
 import { generateClaimSpreadsheet } from '@/utils/excelGenerator';
+import { newAttachmentSession, pruneOldAttachments } from '@/utils/emailAttachments';
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import DocumentScanner from '@/components/DocumentScanner';
 import PrivacyNotice from '@/components/PrivacyNotice';
@@ -1176,6 +1177,8 @@ export default function COIDAFormScreen() {
           try {
             await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
           } catch {}
+          await pruneOldAttachments(tempDir);
+          const attachmentPath = newAttachmentSession(tempDir);
 
           const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
           let totalAttachmentSize = 0;
@@ -1192,7 +1195,7 @@ export default function COIDAFormScreen() {
                 console.warn(`Skipping attachment ${filename}: total would exceed 15MB`);
                 return null;
               }
-              const filePath = `${tempDir}${filename}`;
+              const filePath = attachmentPath(filename);
               await FileSystem.writeAsStringAsync(filePath, base64Data, {
                 encoding: FileSystem.EncodingType.Base64,
               });

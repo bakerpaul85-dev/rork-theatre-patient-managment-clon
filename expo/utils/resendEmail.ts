@@ -5,6 +5,7 @@ import { FormData } from '@/contexts/FormsContext';
 import { findRadiographerByEmail, RADIOGRAPHERS } from '@/constants/radiographers';
 import { readPhoto } from '@/utils/photoStorage';
 import { getHospitalName, getAdminCopyRecipients } from '@/utils/hospitalOverride';
+import { newAttachmentSession, pruneOldAttachments } from '@/utils/emailAttachments';
 
 export function buildMedicalAidEmail(form: FormData, customRecipients?: string[]): { subject: string; body: string; recipients: string[] } {
   const patientName = `${form.patientTitle || ''} ${form.patientFirstName || ''} ${form.patientLastName || ''}`.trim();
@@ -257,11 +258,13 @@ export async function resendFormEmail(form: FormData, customRecipients?: string[
     try {
       await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
     } catch {}
+    await pruneOldAttachments(tempDir);
+    const attachmentPath = newAttachmentSession(tempDir);
 
     for (const photo of photos) {
       try {
         const base64Data = photo.base64Uri.replace(/^data:[^;]+;base64,/, '');
-        const filePath = `${tempDir}${photo.filename}`;
+        const filePath = attachmentPath(photo.filename);
         await FileSystem.writeAsStringAsync(filePath, base64Data, {
           encoding: FileSystem.EncodingType.Base64,
         });
@@ -350,11 +353,13 @@ export async function forwardUserForms(
         try {
           await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
         } catch {}
+        await pruneOldAttachments(tempDir);
+        const attachmentPath = newAttachmentSession(tempDir);
 
         for (const photo of photos) {
           try {
             const base64Data = photo.base64Uri.replace(/^data:[^;]+;base64,/, '');
-            const filePath = `${tempDir}${photo.filename}`;
+            const filePath = attachmentPath(photo.filename);
             await FileSystem.writeAsStringAsync(filePath, base64Data, {
               encoding: FileSystem.EncodingType.Base64,
             });
