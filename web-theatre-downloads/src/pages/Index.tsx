@@ -14,12 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const APK_PATH = "/theatre-app-v1.2.apk" as const;
-const APP_VERSION = "1.2.0" as const;
-const APK_SIZE = "76 MB" as const;
-const BUILD_DATE = "27 October 2026" as const;
+const APK_PATH = "/theatre-app-v1.2.1.apk" as const;
+const APP_VERSION = "1.2.1" as const;
+const APK_SIZE = "65 MB" as const;
+const BUILD_DATE = "30 October 2026" as const;
 
 const WHATS_NEW: readonly string[] = [
+  "Fixed an issue where photo attachments from one case could appear on another case's emailed forms",
   "Theatre clock photos now auto-fill the time on both COIDA and Medical Aid forms",
   "New Theatre Clock section sits directly under the Hospital Sticker on both forms",
   "Employer details are auto-read from the COIDA employer report (NB-marked fields)",
