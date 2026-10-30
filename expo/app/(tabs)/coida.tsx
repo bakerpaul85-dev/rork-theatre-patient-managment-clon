@@ -12,6 +12,7 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  type ScrollViewInstance,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
@@ -162,7 +163,7 @@ export default function COIDAFormScreen() {
   const [showCamera, setShowCamera] = useState(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>(null);
   const [cameraRef, setCameraRef] = useState<any>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
   const scrollPositionRef = useRef<number>(0);
   const navigation = useNavigation();
   const hasUnsavedChangesRef = useRef<boolean>(false);

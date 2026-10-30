@@ -826,7 +826,7 @@ export default function WorklistScreen() {
           refreshControl={
             <RefreshControl
               refreshing={worklistQuery.isFetching && !worklistQuery.isLoading}
-              onRefresh={() => worklistQuery.refetch()}
+              onRefresh={async () => { await worklistQuery.refetch(); }}
               tintColor="#0EA5E9"
             />
           }

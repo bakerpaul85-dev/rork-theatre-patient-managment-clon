@@ -11,6 +11,7 @@ import {
   Platform,
   Keyboard,
   ActivityIndicator,
+  type ScrollViewInstance,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -459,7 +460,7 @@ export default function MedicalAidFormScreen() {
   const [showDocumentScanner, setShowDocumentScanner] = useState<boolean>(false);
   const [isExtractingReferral, setIsExtractingReferral] = useState<boolean>(false);
   const [referralExtractedFields, setReferralExtractedFields] = useState<string[]>([]);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
   const scrollPositionRef = useRef<number>(0);
   const navigation = useNavigation();
   const hasUnsavedChangesRef = useRef<boolean>(false);
