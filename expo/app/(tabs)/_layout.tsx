@@ -60,7 +60,7 @@ export default function TabLayout() {
           title: "Worklist",
           tabBarIcon: ({ color }) => <ListChecks color={color} />,
           headerRight: () => <LogoutBtn />,
-          href: null,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
@@ -78,7 +78,7 @@ export default function TabLayout() {
           title: "Medical Aid",
           tabBarIcon: ({ color }) => <HeartPulse color={color} />,
           headerRight: () => <LogoutBtn />,
-          href: null,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
@@ -87,10 +87,15 @@ export default function TabLayout() {
           title: "COIDA",
           tabBarIcon: ({ color }) => <ShieldCheck color={color} />,
           headerRight: () => <LogoutBtn />,
-          href: null,
+          tabBarButton: () => null,
         }}
       />
-      <Tabs.Screen name="admin" options={{ href: null }} />
+      <Tabs.Screen
+        name="admin"
+        options={{
+          tabBarButton: () => null,
+        }}
+      />
     </Tabs>
   );
 }
